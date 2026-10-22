@@ -59,6 +59,8 @@ export class ClawSimulation {
   ids!: Ids;
   claw: ClawTuning;
   prizes: PrizePlacement[];
+  /** Chute guard (出貨口擋板) height in metres. */
+  guardH: number = CABINET.guardH;
   prizeState: PrizeState[] = [];
   readonly solenoid = new Solenoid();
   readonly timestep = 0.002;
@@ -74,15 +76,16 @@ export class ClawSimulation {
   private prevHeadVel: [number, number, number] = [0, 0, 0];
   time = 0;
 
-  private constructor(mj: Mujoco, claw: ClawTuning, prizes: PrizePlacement[]) {
+  private constructor(mj: Mujoco, claw: ClawTuning, prizes: PrizePlacement[], guardH: number) {
     this.mj = mj;
+    this.guardH = guardH;
     this.claw = cloneClawTuning(claw);
     this.prizes = prizes.map((p) => ({ ...p }));
     this.compile();
   }
 
-  static async create(claw: ClawTuning, prizes: PrizePlacement[]): Promise<ClawSimulation> {
-    return new ClawSimulation(await getMujoco(), claw, prizes);
+  static async create(claw: ClawTuning, prizes: PrizePlacement[], guardH: number = CABINET.guardH): Promise<ClawSimulation> {
+    return new ClawSimulation(await getMujoco(), claw, prizes, guardH);
   }
 
   private name2id(type: number, name: string): number {
@@ -109,7 +112,7 @@ export class ClawSimulation {
   }
 
   private compile(): void {
-    const xml = buildMjcf({ claw: this.claw, prizes: this.prizes, timestep: this.timestep });
+    const xml = buildMjcf({ claw: this.claw, prizes: this.prizes, guardH: this.guardH, timestep: this.timestep });
     const mj = this.mj;
     this.model = mj.MjModel.from_xml_string(xml);
     this.data = new mj.MjData(this.model);
@@ -288,6 +291,15 @@ export class ClawSimulation {
       this.applySleeve();
       return;
     }
+    this.rebuild();
+  }
+
+  /** Changes the chute guard height (cm on the set-up page, metres here); prizes stay put. */
+  setGuardHeight(h: number): void {
+    const [lo, hi] = CABINET.guardRange;
+    const clamped = Math.max(lo, Math.min(hi, h));
+    if (Math.abs(clamped - this.guardH) < 1e-6) return;
+    this.guardH = clamped;
     this.rebuild();
   }
 

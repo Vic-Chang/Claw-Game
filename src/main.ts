@@ -61,6 +61,11 @@ const panel = new OperatorPanel(cloneConfig(config), {
     saveConfig(config);
     send({ type: 'prizes', counts, seed });
   },
+  onGuard: (cm) => {
+    config.guardCm = cm;
+    saveConfig(config);
+    send({ type: 'guard', heightCm: cm });
+  },
   onTestPlay: () => send({ type: 'testPlay' }),
   onClearAccounts: () => send({ type: 'clearAccounts' }),
   onClearBank: () => send({ type: 'clearBank' }),
@@ -157,7 +162,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
   }
 };
 
-send({ type: 'init', settings: config.settings, claw: config.claw, counts: config.counts, seed: config.seed });
+send({ type: 'init', settings: config.settings, claw: config.claw, counts: config.counts, seed: config.seed, guardCm: config.guardCm });
 
 document.addEventListener('visibilitychange', () => send({ type: 'pause', paused: document.hidden }));
 

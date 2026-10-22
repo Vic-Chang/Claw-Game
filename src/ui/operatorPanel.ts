@@ -12,6 +12,7 @@ import {
   sleeveSpec,
   spreadRange,
 } from '../sim/clawConfig';
+import { CABINET } from '../sim/cabinet';
 import { ARM_ANGLES, armGeometry } from '../sim/mjcf';
 import { PRIZE_KINDS, type PrizeCounts, type PrizeKind } from '../sim/prizes';
 import { torqueAtVoltage } from '../sim/solenoid';
@@ -22,6 +23,7 @@ export interface OperatorCallbacks {
   onSettings(s: Settings): void;
   onClaw(c: ClawTuning): void;
   onPrizes(counts: PrizeCounts, seed: number): void;
+  onGuard(heightCm: number): void;
   onTestPlay(): void;
   onClearAccounts(): void;
   onClearBank(): void;
@@ -429,6 +431,21 @@ export class OperatorPanel {
 
   private buildLayout(): void {
     const p = this.panel('layout');
+    p.append(el('h3', {}, '出貨口擋板'));
+    p.append(el('p', { class: 'note' }, '出獎口內側的透明壓克力擋板高度。越高越難把獎品推（喇）進洞、夾起來也要舉得更高；0 cm＝拆掉擋板。調整後立即重建，獎品位置不變。'));
+    const [gLo, gHi] = CABINET.guardRange;
+    const guard = el('input', { type: 'range', min: String(gLo * 100), max: String(gHi * 100), step: '0.5' });
+    guard.value = String(this.cfg.guardCm);
+    const guardOut = el('output', {}, `${this.cfg.guardCm.toFixed(1)} cm`);
+    guard.addEventListener('input', () => (guardOut.textContent = `${Number(guard.value).toFixed(1)} cm`));
+    guard.addEventListener('change', () => {
+      this.cfg.guardCm = Number(guard.value);
+      this.cb.onGuard(this.cfg.guardCm);
+    });
+    const gf = el('div', { class: 'field' });
+    gf.append(el('span', {}, '擋板高度'), guard, guardOut);
+    p.append(gf);
+    p.append(el('h3', {}, '獎品'));
     p.append(el('p', { class: 'note' }, '擺放獎品（台主補貨）。套用後會重新擺放並讓獎品自然落定。'));
     const counts = { ...this.cfg.counts };
     for (const k of Object.keys(PRIZE_KINDS) as PrizeKind[]) {

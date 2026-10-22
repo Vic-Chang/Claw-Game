@@ -12,8 +12,10 @@ export const CABINET = {
   gantryZ: 0.7,
   /** Prize chute hole in the front-left corner. */
   hole: { x0: -0.35, x1: -0.16, y0: -0.32, y1: -0.13 },
-  /** Acrylic guard (擋板) around the hole's inner edges. */
+  /** Default height of the acrylic guard (擋板) around the hole's inner edges. */
   guardH: 0.075,
+  /** Adjustable guard height range (m). 0 = no guard. */
+  guardRange: [0, 0.15] as [number, number],
   guardT: 0.006,
   /** Gantry travel limits (limit switches), carriage position. */
   travel: { x0: -0.29, x1: 0.29, y0: -0.26, y1: 0.26 },

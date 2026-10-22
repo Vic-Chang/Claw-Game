@@ -1,4 +1,5 @@
 import { type Settings, loadSettings, saveSettings } from '../machine/settings';
+import { CABINET } from '../sim/cabinet';
 import { type ClawTuning, cloneClawTuning, defaultClawTuning } from '../sim/clawConfig';
 import { DEFAULT_COUNTS, type PrizeCounts } from '../sim/prizes';
 
@@ -9,6 +10,8 @@ export interface AppConfig {
   counts: PrizeCounts;
   seed: number;
   volume: number;
+  /** Chute guard (出貨口擋板) height, cm. */
+  guardCm: number;
 }
 
 const KEY = 'feiluoli-machine-v1';
@@ -34,13 +37,14 @@ export function loadConfig(): AppConfig {
     counts: { ...DEFAULT_COUNTS, ...(saved.counts ?? {}) },
     seed: typeof saved.seed === 'number' ? saved.seed : 7,
     volume: typeof saved.volume === 'number' ? saved.volume : 0.6,
+    guardCm: typeof saved.guardCm === 'number' ? saved.guardCm : CABINET.guardH * 100,
   };
 }
 
 export function saveConfig(c: AppConfig): void {
   saveSettings(c.settings);
   try {
-    globalThis.localStorage?.setItem(KEY, JSON.stringify({ claw: c.claw, counts: c.counts, seed: c.seed, volume: c.volume }));
+    globalThis.localStorage?.setItem(KEY, JSON.stringify({ claw: c.claw, counts: c.counts, seed: c.seed, volume: c.volume, guardCm: c.guardCm }));
   } catch {
     // Not persisted — fine.
   }

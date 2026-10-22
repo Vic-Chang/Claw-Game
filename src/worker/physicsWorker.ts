@@ -57,7 +57,7 @@ async function handle(msg: ToWorker): Promise<void> {
   switch (msg.type) {
     case 'init': {
       board = new Board(msg.settings);
-      sim = await ClawSimulation.create(msg.claw, layoutPrizes(msg.counts, msg.seed));
+      sim = await ClawSimulation.create(msg.claw, layoutPrizes(msg.counts, msg.seed), msg.guardCm / 100);
       hookEvents();
       sim.reset();
       sendModel();
@@ -90,6 +90,13 @@ async function handle(msg: ToWorker): Promise<void> {
     case 'prizes':
       if (sim) {
         sim.setPrizes(layoutPrizes(msg.counts, msg.seed));
+        hookEvents();
+        sendModel();
+      }
+      break;
+    case 'guard':
+      if (sim) {
+        sim.setGuardHeight(msg.heightCm / 100);
         hookEvents();
         sendModel();
       }

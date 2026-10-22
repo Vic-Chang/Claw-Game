@@ -189,8 +189,8 @@ function prizeXml(p: PrizePlacement, i: number): string {
   }
 }
 
-function cabinetXml(): string {
-  const { halfW: W, halfD: D, wallH, hole, guardH, guardT } = CABINET;
+function cabinetXml(guardH: number): string {
+  const { halfW: W, halfD: D, wallH, hole, guardT } = CABINET;
   const T = 0.02;
   const box = (name: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, extra = '') =>
     `<geom name="${name}" type="box" pos="${v((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2)}" size="${v((x1 - x0) / 2, (y1 - y0) / 2, (z1 - z0) / 2)}" ${extra}/>`;
@@ -207,9 +207,13 @@ function cabinetXml(): string {
     box('glass_right', W, W + 0.01, -D, D, -0.3, wallH, glass),
     box('glass_back', -W, W, D, D + 0.01, -0.3, wallH, glass),
     box('glass_front', -W, W, -D - 0.01, -D, 0, wallH, glass),
-    // Acrylic guard around the chute (防護擋板).
-    box('guard_side', hole.x1, hole.x1 + guardT, hole.y0, hole.y1 + guardT, 0, guardH, acrylic),
-    box('guard_back', hole.x0, hole.x1 + guardT, hole.y1, hole.y1 + guardT, 0, guardH, acrylic),
+    // Acrylic guard around the chute (防護擋板); the operator sets its height, 0 removes it.
+    ...(guardH > 0.001
+      ? [
+          box('guard_side', hole.x1, hole.x1 + guardT, hole.y0, hole.y1 + guardT, 0, guardH, acrylic),
+          box('guard_back', hole.x0, hole.x1 + guardT, hole.y1, hole.y1 + guardT, 0, guardH, acrylic),
+        ]
+      : []),
     // Chute shaft and the sloped slide to the pickup door.
     box('chute_front', hole.x0, hole.x1, hole.y0 - 0.01, hole.y0, -0.3, 0, chute),
     box('chute_inner', hole.x1, hole.x1 + 0.01, hole.y0, hole.y1, -0.3, -T, chute),
@@ -223,6 +227,8 @@ function cabinetXml(): string {
 export interface MjcfOptions {
   claw: ClawTuning;
   prizes: PrizePlacement[];
+  /** Chute guard height in metres (default CABINET.guardH). */
+  guardH?: number;
   timestep?: number;
 }
 
@@ -238,7 +244,7 @@ export function buildMjcf(opts: MjcfOptions): string {
   <geom contype="1" conaffinity="1" condim="4" solref="0.004 1" solimp="0.9 0.97 0.001"/>
 </default>
 <worldbody>
-${cabinetXml()}
+${cabinetXml(opts.guardH ?? CABINET.guardH)}
 <body name="gantry" pos="${v(0, 0, gantryZ)}">
   <joint name="gantry_x" type="slide" axis="1 0 0" range="${v(travel.x0, travel.x1)}" damping="4" armature="0.05"/>
   <joint name="gantry_y" type="slide" axis="0 1 0" range="${v(travel.y0, travel.y1)}" damping="4" armature="0.05"/>

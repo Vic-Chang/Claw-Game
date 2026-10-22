@@ -223,3 +223,43 @@ describe('chute electric eye (落物電眼)', () => {
     sim.dispose();
   });
 });
+
+describe('出貨口擋板 (chute guard)', () => {
+  /** Shoves a box along the bed towards the chute and reports whether it fell in. */
+  async function shove(guardCm: number) {
+    const h = CABINET.hole;
+    const y = (h.y0 + h.y1) / 2;
+    const sim = await ClawSimulation.create(tuning(), [{ kind: 'cookieBox', pos: [h.x1 + 0.07, y, 0.025], yaw: 0, color: '#fff' }], guardCm / 100);
+    let drops = 0;
+    sim.events.onPrizeDrop = () => drops++;
+    sim.reset(0.5);
+    sim.data.qvel[sim.ids.prizeDof[0]] = -1.2;
+    sim.step(2);
+    const guards = Array.from({ length: sim.model.ngeom }, (_, g) => sim.geomName(g)).filter((n) => n.startsWith('guard_'));
+    sim.dispose();
+    return { drops, guards: guards.length };
+  }
+
+  test('a guard stops a prize pushed along the bed; without it the prize drops in', async () => {
+    const guarded = await shove(7.5);
+    const open = await shove(0);
+    expect(guarded.guards).toBe(2);
+    expect(guarded.drops).toBe(0);
+    expect(open.guards).toBe(0);
+    expect(open.drops).toBe(1);
+  });
+
+  test('changing the guard height rebuilds the wall and keeps prizes in place', async () => {
+    const sim = await ClawSimulation.create(tuning(), [{ kind: 'cookieBox', pos: [0.1, 0.1, 0.03], yaw: 0.5, color: '#fff' }]);
+    sim.reset(1.0);
+    const b = sim.ids.prizeBodies[0] * 3;
+    const before = Array.from(sim.data.xpos.slice(b, b + 3) as Float64Array);
+    sim.setGuardHeight(0.12);
+    let halfH = 0;
+    for (let g = 0; g < sim.model.ngeom; g++) if (sim.geomName(g) === 'guard_side') halfH = sim.model.geom_size[g * 3 + 2];
+    expect(halfH * 2).toBeCloseTo(0.12, 4);
+    const b2 = sim.ids.prizeBodies[0] * 3;
+    for (let k = 0; k < 3; k++) expect(sim.data.xpos[b2 + k]).toBeCloseTo(before[k], 2);
+    sim.dispose();
+  });
+});
