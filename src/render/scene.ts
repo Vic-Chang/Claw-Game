@@ -223,7 +223,7 @@ export class MachineScene {
       else if (n.startsWith('gantry_')) mat = yellow;
       else if (n.endsWith('_sleeve')) mat = rubber;
       else if (n === 'claw_housing') mat = pinkMetal;
-      else if (n.startsWith('claw_') || n.startsWith('arm')) mat = metal;
+      else if (n.startsWith('claw_') || n.startsWith('arm') || n.startsWith('antiswing_')) mat = metal;
       else if (prize >= 0 && n.endsWith('_box')) {
         if (!boxMats.has(prize)) {
           const kind = prizeKinds[prize];

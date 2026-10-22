@@ -29,7 +29,15 @@ export function loadConfig(): AppConfig {
   const saved = readJson<Omit<AppConfig, 'settings'>>(KEY);
   const claw = defaultClawTuning();
   if (saved.claw && Array.isArray(saved.claw.arms) && saved.claw.arms.length === 3) {
-    Object.assign(claw, saved.claw, { arms: saved.claw.arms.map((a, i) => ({ ...claw.arms[i], ...a })) });
+    const sc = saved.claw;
+    if (sc.size) claw.size = sc.size;
+    if (sc.sleeve) claw.sleeve = sc.sleeve;
+    if (typeof sc.customFriction === 'number') claw.customFriction = sc.customFriction;
+    // Only the spread is per arm (older saves also had per-arm fins; those are dropped).
+    sc.arms.forEach((a, i) => {
+      if (typeof a?.spreadCm === 'number') claw.arms[i].spreadCm = a.spreadCm;
+    });
+    if (sc.antiSwing) claw.antiSwing = { ...claw.antiSwing, ...sc.antiSwing };
   }
   return {
     settings: loadSettings(),

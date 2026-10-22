@@ -4,7 +4,7 @@ import { PRIZE_KINDS, type PrizePlacement } from './prizes';
 
 /**
  * Builds the MuJoCo MJCF model of the whole machine. Geometry that depends on the
- * mechanical claw tuning (size, spread, anti-swing fins) is baked into the XML, so
+ * mechanical claw tuning (size, spread, anti-swing plate) is baked into the XML, so
  * changing those means regenerating the model; voltages, speeds and friction are
  * changed at runtime on the compiled model.
  */
@@ -81,8 +81,7 @@ function clawXml(t: ClawTuning): string {
   out.push(`<site name="rope_bot" pos="${v(0, 0, 0.044 * s)}" size="0.003"/>`);
 
   for (let i = 0; i < ARM_COUNT; i++) {
-    const a = t.arms[i];
-    const g = armGeometry(s, a.spreadCm);
+    const g = armGeometry(s, t.arms[i].spreadCm);
     const phi = ARM_ANGLES[i];
     const [ex, ez] = g.elbow;
     const [tx, tz] = g.tip;
@@ -100,34 +99,77 @@ function clawXml(t: ClawTuning): string {
       `<geom name="arm${i}_sleeve" priority="1" type="capsule" fromto="${v(sx, 0, sz, tx, 0, tz)}" size="${f(0.0062 * s)}" mass="${f(armMass * 0.15)}" ` +
         `rgba="0.15 0.15 0.15 1" condim="6" friction="${v(...sleeve.friction)}" solref="${v(sleeve.solrefTime, 1)}"/>`,
     );
-    // Anti-swing fin (防甩片): a curved metal tab at the tip, cupped upward by `finConcavityDeg`
-    // and yawed about the arm by `finDirectionDeg`.
-    const segs = 3;
-    const segLen = 0.0055 * s;
-    const halfW = 0.0075 * s;
-    const conc = (a.finConcavityDeg * Math.PI) / 180;
-    let px = 0;
-    let pz = 0;
-    out.push(`<frame pos="${v(tx, 0, tz)}" euler="${v(0, 0, (a.finDirectionDeg * Math.PI) / 180)}">`);
-    for (let k = 0; k < segs; k++) {
-      const ang = (conc * (k + 1)) / segs;
-      const dx = -Math.cos(ang);
-      const dz = Math.sin(ang);
-      const cx = px + (dx * segLen) / 2;
-      const cz = pz + (dz * segLen) / 2;
-      out.push(
-        `<geom name="arm${i}_fin${k}" priority="1" type="box" pos="${v(cx, 0, cz)}" euler="${v(0, ang, 0)}" size="${v(segLen / 2, halfW, 0.0012 * s)}" ` +
-          `mass="${f((armMass * 0.15) / segs)}" rgba="0.9 0.9 0.94 1" friction="0.3 0.003 0.0001"/>`,
-      );
-      px += dx * segLen;
-      pz += dz * segLen;
-    }
-    out.push(`</frame>`);
+    // Inward tip hook: the flat metal foot at the end of each JS-claw arm.
+    const hookLen = 0.0165 * s;
+    out.push(
+      `<geom name="arm${i}_hook" priority="1" type="box" pos="${v(tx - hookLen / 2, 0, tz)}" size="${v(hookLen / 2, 0.0075 * s, 0.0012 * s)}" ` +
+        `mass="${f(armMass * 0.15)}" rgba="0.9 0.9 0.94 1" friction="0.3 0.003 0.0001"/>`,
+    );
     out.push(`<site name="arm${i}_tip" pos="${v(tx, 0, tz)}" size="0.002"/>`);
     out.push(`</body>`);
   }
   out.push(`</body>`);
   return out.join('\n');
+}
+
+/** Height (gantry frame) where the claw cap meets the anti-swing plate, just as it reaches the top. */
+export const ANTISWING_CONTACT_Z = -0.116;
+const ANTISWING_SEGMENTS = 8;
+const ANTISWING_LENGTH = 0.1;
+const ANTISWING_HALF_WIDTH = 0.032;
+/** Where along the plate (fraction from its centre) the cable passes and the claw hits. */
+const ANTISWING_HIT = -0.35;
+
+/** Throw direction as a unit vector: 0° = front (towards the player), 90° = right. */
+export function antiSwingDirection(directionDeg: number): [number, number] {
+  const a = (directionDeg * Math.PI) / 180;
+  return [Math.sin(a), -Math.cos(a)];
+}
+
+/**
+ * Profile of the anti-swing plate in its own (u, z) plane, u along the throw direction:
+ * a dome (concave side facing the claw) bent by `concavityDeg` end to end, shifted so the
+ * point above the cable sits at ANTISWING_CONTACT_Z. There its underside slopes up
+ * towards +u, so a claw rising into it is pushed towards +u, the throw direction.
+ */
+export function antiSwingProfile(concavityDeg: number): Array<{ u: number; z: number; angle: number; len: number }> {
+  const theta = (concavityDeg * Math.PI) / 180;
+  const n = ANTISWING_SEGMENTS;
+  const len = ANTISWING_LENGTH / n;
+  const pts: Array<[number, number]> = [[0, 0]];
+  const angles: number[] = [];
+  for (let k = 0; k < n; k++) {
+    // Tangent angle runs from +θ/2 to −θ/2 across the plate (rises, crests, falls).
+    const ang = theta * (0.5 - (k + 0.5) / n);
+    angles.push(ang);
+    const [pu, pz] = pts[pts.length - 1];
+    pts.push([pu + Math.cos(ang) * len, pz + Math.sin(ang) * len]);
+  }
+  // Point on the plate at the hit fraction; shift it onto the cable axis at the contact height.
+  const hitIndex = ((ANTISWING_HIT + 0.5) * n);
+  const k0 = Math.floor(hitIndex);
+  const fr = hitIndex - k0;
+  const hu = pts[k0][0] + (pts[k0 + 1][0] - pts[k0][0]) * fr;
+  const hz = pts[k0][1] + (pts[k0 + 1][1] - pts[k0][1]) * fr;
+  return angles.map((angle, k) => ({
+    u: (pts[k][0] + pts[k + 1][0]) / 2 - hu,
+    z: (pts[k][1] + pts[k + 1][1]) / 2 - hz + ANTISWING_CONTACT_Z,
+    angle,
+    len,
+  }));
+}
+
+function antiSwingXml(t: ClawTuning): string {
+  const [dx, dy] = antiSwingDirection(t.antiSwing.directionDeg);
+  const yaw = Math.atan2(dy, dx);
+  const thick = 0.0015;
+  const geoms = antiSwingProfile(t.antiSwing.concavityDeg).map(
+    (seg, k) =>
+      // The box's long axis follows the profile; its top face is the plate's underside + thickness.
+      `<geom name="antiswing_${k}" priority="1" type="box" pos="${v(seg.u, 0, seg.z + thick)}" euler="${v(0, -seg.angle, 0)}" ` +
+      `size="${v(seg.len / 2 + 0.0005, ANTISWING_HALF_WIDTH, thick)}" mass="0.01" rgba="0.85 0.86 0.9 1" contype="3" conaffinity="3" friction="0.3 0.003 0.0001"/>`,
+  );
+  return `<frame euler="${v(0, 0, yaw)}">\n  ${geoms.join('\n  ')}\n  </frame>`;
 }
 
 function prizeXml(p: PrizePlacement, i: number): string {
@@ -251,6 +293,8 @@ ${cabinetXml(opts.guardH ?? CABINET.guardH)}
   <geom name="gantry_carriage" type="box" pos="0 0 0.03" size="0.06 0.05 0.03" mass="2.2" rgba="0.95 0.8 0.15 1" contype="0" conaffinity="0"/>
   <geom name="gantry_tube" type="cylinder" pos="${v(0, 0, -0.065)}" size="${v(0.022 * Math.max(1, s), 0.025)}" mass="0.05" rgba="0.95 0.8 0.15 1" contype="2" conaffinity="2"/>
   <site name="pulley" pos="0 0 -0.02" size="0.004"/>
+  <!-- 防甩片: bent plate under the gantry the claw hits on the way up. -->
+  ${antiSwingXml(claw)}
 </body>
 ${clawXml(claw)}
 ${prizes.map(prizeXml).join('\n')}

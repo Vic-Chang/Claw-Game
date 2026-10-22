@@ -280,12 +280,9 @@ export class ClawSimulation {
   setClawTuning(t: ClawTuning): void {
     const geomChanged =
       t.size !== this.claw.size ||
-      t.arms.some(
-        (a, i) =>
-          a.spreadCm !== this.claw.arms[i].spreadCm ||
-          a.finConcavityDeg !== this.claw.arms[i].finConcavityDeg ||
-          a.finDirectionDeg !== this.claw.arms[i].finDirectionDeg,
-      );
+      t.antiSwing.concavityDeg !== this.claw.antiSwing.concavityDeg ||
+      t.antiSwing.directionDeg !== this.claw.antiSwing.directionDeg ||
+      t.arms.some((a, i) => a.spreadCm !== this.claw.arms[i].spreadCm);
     this.claw = cloneClawTuning(t);
     if (!geomChanged) {
       this.applySleeve();
