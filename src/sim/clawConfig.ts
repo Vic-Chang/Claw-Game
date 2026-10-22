@@ -62,11 +62,14 @@ export const SIZE_LABEL: Record<ClawSize, string> = { small: '小爪', medium: '
 /** Allowed spread range for a given claw size (cm). */
 export function spreadRange(size: ClawSize): [number, number] {
   const s = SIZE_SCALE[size];
-  return [Math.round(7 * s * 10) / 10, Math.round(16 * s * 10) / 10];
+  return [Math.round(9 * s * 10) / 10, Math.round(22 * s * 10) / 10];
 }
 
+/** Default open tip spread: wide, so the claw readily gets around a prize. */
+export const DEFAULT_SPREAD_CM = 16;
+
 export function defaultClawTuning(): ClawTuning {
-  const arm = (): ArmTuning => ({ spreadCm: 12 });
+  const arm = (): ArmTuning => ({ spreadCm: DEFAULT_SPREAD_CM });
   return { size: 'medium', sleeve: 'rubber', customFriction: 0.8, arms: [arm(), arm(), arm()], antiSwing: defaultAntiSwing() };
 }
 

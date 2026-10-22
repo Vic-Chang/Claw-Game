@@ -8,6 +8,7 @@ import {
   SIZE_SCALE,
   SLEEVES,
   type SleeveMaterial,
+  DEFAULT_SPREAD_CM,
   cloneClawTuning,
   defaultAntiSwing,
   sleeveSpec,
@@ -426,9 +427,9 @@ export class OperatorPanel {
       top += `<g transform="rotate(${deg})"><rect x="${u0 * sc}" y="${-0.032 * sc}" width="${(u1 - u0) * sc}" height="${0.064 * sc}" fill="#7fd3ff" fill-opacity="0.35" stroke="#7fd3ff"/>`;
       top += `<line x1="0" y1="0" x2="80" y2="0" stroke="#ffcf1a" stroke-width="4"/><path d="M80,-8 L96,0 L80,8 Z" fill="#ffcf1a"/></g>`;
       top += `<text x="0" y="-88" fill="#b9acd3" font-size="11" text-anchor="middle">後</text><text x="0" y="96" fill="#b9acd3" font-size="11" text-anchor="middle">前（玩家）</text></svg>`;
-      // Side section along the throw direction: gantry, tube, plate and the claw at the top.
-      let side = `<svg width="200" height="200" viewBox="-110 -60 220 250">`;
-      side += `<rect x="-51" y="-51" width="102" height="51" fill="#ffcf1a"/><rect x="-19" y="34" width="38" height="42" fill="#d9b200"/>`;
+      // Side section along the throw direction: gantry, the plate right under it, and the claw at the top.
+      let side = `<svg width="200" height="200" viewBox="-110 -70 220 220">`;
+      side += `<rect x="-51" y="-51" width="102" height="51" fill="#ffcf1a"/>`;
       const plate = profile
         .map((seg, k) => {
           const x0 = seg.u - (Math.cos(seg.angle) * seg.len) / 2;
@@ -439,12 +440,12 @@ export class OperatorPanel {
         })
         .join(' ');
       side += `<path d="${plate}" stroke="#7fd3ff" stroke-width="4" fill="none" stroke-linejoin="round"/>`;
-      const capTop = -0.02 - CABINET.ropeTop;
+      const capTop = CABINET.pulleyZ - CABINET.ropeTop;
       const headC = capTop - HEAD.ropeOffset * s;
       side += `<line x1="0" y1="${17}" x2="0" y2="${-capTop * sc}" stroke="#888" stroke-width="2"/>`;
       side += `<rect x="${-HEAD.radius * s * sc}" y="${-(headC + HEAD.halfHeight * s) * sc}" width="${2 * HEAD.radius * s * sc}" height="${2 * HEAD.halfHeight * s * sc}" fill="#e0338c"/>`;
       side += `<line x1="20" y1="${-(headC - 0.02) * sc}" x2="80" y2="${-(headC - 0.02) * sc}" stroke="#ffcf1a" stroke-width="4"/><path d="M80,${-(headC - 0.02) * sc - 8} L96,${-(headC - 0.02) * sc} L80,${-(headC - 0.02) * sc + 8} Z" fill="#ffcf1a"/>`;
-      side += `<text x="0" y="186" fill="#b9acd3" font-size="11" text-anchor="middle">側視：爪子到頂撞防甩片 → 往箭頭方向丟</text></svg>`;
+      side += `<text x="0" y="140" fill="#b9acd3" font-size="11" text-anchor="middle">側視：爪子到頂撞防甩片 → 往箭頭方向丟</text></svg>`;
       preview.innerHTML = top + side;
       const g = armGeometry(s, c.arms[0].spreadCm);
       const force = torqueAtVoltage(48) / g.lever;
@@ -455,7 +456,7 @@ export class OperatorPanel {
     const reset = el('button', {}, '恢復標準 JS 爪');
     reset.addEventListener('click', () => {
       Object.assign(c, { size: 'medium', sleeve: 'rubber', customFriction: 0.8, antiSwing: defaultAntiSwing() });
-      c.arms.forEach((a) => (a.spreadCm = 12));
+      c.arms.forEach((a) => (a.spreadCm = DEFAULT_SPREAD_CM));
       this.applyClaw(true);
       this.buildClaw();
     });

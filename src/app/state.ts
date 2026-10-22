@@ -1,6 +1,6 @@
 import { type Settings, loadSettings, saveSettings } from '../machine/settings';
 import { CABINET } from '../sim/cabinet';
-import { type ClawTuning, cloneClawTuning, defaultClawTuning } from '../sim/clawConfig';
+import { type ClawTuning, cloneClawTuning, defaultClawTuning, spreadRange } from '../sim/clawConfig';
 import { DEFAULT_COUNTS, type PrizeCounts } from '../sim/prizes';
 
 /** Operator-side configuration that lives on the main thread and is mirrored to the worker. */
@@ -34,8 +34,9 @@ export function loadConfig(): AppConfig {
     if (sc.sleeve) claw.sleeve = sc.sleeve;
     if (typeof sc.customFriction === 'number') claw.customFriction = sc.customFriction;
     // Only the spread is per arm (older saves also had per-arm fins; those are dropped).
+    const [lo, hi] = spreadRange(claw.size);
     sc.arms.forEach((a, i) => {
-      if (typeof a?.spreadCm === 'number') claw.arms[i].spreadCm = a.spreadCm;
+      if (typeof a?.spreadCm === 'number') claw.arms[i].spreadCm = Math.max(lo, Math.min(hi, a.spreadCm));
     });
     if (sc.antiSwing) claw.antiSwing = { ...claw.antiSwing, ...sc.antiSwing };
   }

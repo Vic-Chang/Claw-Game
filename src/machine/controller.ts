@@ -383,7 +383,7 @@ export class Board {
         break;
       }
       case 'topPull': {
-        // A12 上停上拉: keep reeling into the stop tube for A12a × 0.1 s — the jolt that throws.
+        // A12 上停上拉: keep reeling into the anti-swing plate for A12a × 0.1 s — the jolt that throws.
         const pull = this.s('A12a') * 0.1;
         this.setVoltage('medium', io);
         io.setWinchVelocity(this.stateTime < pull ? -WINCH_SPEED * (this.s('E6') / 100) : 0);

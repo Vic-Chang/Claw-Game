@@ -174,7 +174,7 @@ export class ClawSimulation {
     const a = this.ids.headQ;
     q[a] = x;
     q[a + 1] = y;
-    q[a + 2] = CABINET.gantryZ - 0.02 - this.ropeLen - HEAD.ropeOffset * s;
+    q[a + 2] = CABINET.gantryZ + CABINET.pulleyZ - this.ropeLen - HEAD.ropeOffset * s;
     q[a + 3] = 1;
     q[a + 4] = 0;
     q[a + 5] = 0;
@@ -429,7 +429,7 @@ export class ClawSimulation {
     const v = this.headVel();
     const dv = Math.hypot(v[0] - this.prevHeadVel[0], v[1] - this.prevHeadVel[1], v[2] - this.prevHeadVel[2]);
     this.prevHeadVel = v;
-    // A sudden velocity change of the hanging claw = it hit glass, the tube or a prize.
+    // A sudden velocity change of the hanging claw = it hit glass, the anti-swing plate or a prize.
     if (dv > 0.25 && this.knockCooldown === 0) {
       this.knockCooldown = 0.08;
       this.events.onKnock?.(Math.min(1, dv / 1.5));

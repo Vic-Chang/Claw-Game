@@ -21,10 +21,12 @@ export const CABINET = {
   travel: { x0: -0.29, x1: 0.29, y0: -0.26, y1: 0.26 },
   /** Home position (above the hole). */
   home: { x: -0.255, y: -0.225 },
-  /** Shortest cable length: claw head pulled into the stop tube (管子). */
-  ropeMin: 0.075,
-  /** Cable length at the normal top stop (upper limit switch). */
-  ropeTop: 0.1,
+  /** Where the cable leaves the winch inside the carriage, relative to gantryZ. */
+  pulleyZ: 0.02,
+  /** Shortest cable length: 上停上拉 drives the claw head up into the anti-swing plate. */
+  ropeMin: 0.005,
+  /** Cable length at the normal top stop: the claw cap just under the plate. */
+  ropeTop: 0.03,
   /** Longest cable the winch can pay out. */
   ropeMax: 0.75,
 } as const;

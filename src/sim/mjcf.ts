@@ -16,11 +16,12 @@ export const ARM_ANGLES = [90, 210, 330].map((d) => (d * Math.PI) / 180);
 /** JS claw head dimensions at scale 1 (metres): slim coil housing, plunger rod and hub. */
 export const HEAD = {
   radius: 0.025,
-  halfHeight: 0.045,
+  /** A short coil section, about 3 cm tall. */
+  halfHeight: 0.016,
   /** Cable attachment above the head centre (top of the cap). */
-  ropeOffset: 0.052,
+  ropeOffset: 0.023,
   /** Hub carrying the arm pivots, below the housing. */
-  hubZ: -0.075,
+  hubZ: -0.04,
   hingeR: 0.015,
 };
 
@@ -109,12 +110,11 @@ function clawXml(t: ClawTuning): string {
   const black = 'rgba="0.1 0.1 0.11 1"';
   const gold = 'rgba="0.93 0.68 0.12 1"';
   const out: string[] = [];
-  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ - 0.02 - CABINET.ropeTop - HEAD.ropeOffset * s)}">`);
+  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ + CABINET.pulleyZ - CABINET.ropeTop - HEAD.ropeOffset * s)}">`);
   out.push(`<joint name="claw_free" type="free" damping="0.1"/>`);
-  // Coil housing with its two clamp rings, the cap the cable is tied to, the plunger rod and the hub.
+  // Short coil housing with its clamp ring, the cap the cable is tied to, the plunger rod and the hub.
   out.push(`<geom name="claw_housing" priority="1" type="cylinder" size="${v(HEAD.radius * s, HEAD.halfHeight * s)}" mass="${f(headMass * 0.72)}" ${black} contype="3" conaffinity="3" ${metal}/>`);
-  out.push(`<geom name="claw_ringTop" priority="1" type="cylinder" pos="${v(0, 0, 0.012 * s)}" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.04)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
-  out.push(`<geom name="claw_ringLow" priority="1" type="cylinder" pos="${v(0, 0, -0.012 * s)}" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.04)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_ring" priority="1" type="cylinder" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.08)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
   out.push(`<geom name="claw_cap" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.halfHeight + 0.0035) * s)}" size="${v(0.014 * s, 0.0035 * s)}" mass="${f(headMass * 0.04)}" ${black} contype="3" conaffinity="3"/>`);
   out.push(`<geom name="claw_rod" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" size="${v(0.005 * s, (-HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" mass="${f(headMass * 0.04)}" rgba="0.8 0.8 0.84 1" ${metal}/>`);
   out.push(`<geom name="claw_hub" priority="1" type="box" pos="${v(0, 0, HEAD.hubZ * s)}" size="${v(0.016 * s, 0.016 * s, 0.007 * s)}" mass="${f(headMass * 0.12)}" ${gold} ${metal}/>`);
@@ -154,8 +154,11 @@ function clawXml(t: ClawTuning): string {
   return out.join('\n');
 }
 
-/** Height (gantry frame) where the claw cap meets the anti-swing plate, just as it reaches the top. */
-export const ANTISWING_CONTACT_Z = -0.116;
+/**
+ * Height (gantry frame) where the claw cap meets the anti-swing plate, just as it reaches the
+ * top. The plate hangs directly under the carriage, nothing in between.
+ */
+export const ANTISWING_CONTACT_Z = CABINET.pulleyZ - CABINET.ropeTop + 0.002;
 const ANTISWING_SEGMENTS = 8;
 const ANTISWING_LENGTH = 0.1;
 const ANTISWING_HALF_WIDTH = 0.032;
@@ -319,7 +322,6 @@ export interface MjcfOptions {
 export function buildMjcf(opts: MjcfOptions): string {
   const { claw, prizes } = opts;
   const { travel, gantryZ } = CABINET;
-  const s = SIZE_SCALE[claw.size];
   return `<mujoco model="feiluoli-standard">
 <compiler angle="radian" autolimits="true"/>
 <option timestep="${f(opts.timestep ?? 0.002)}" integrator="implicitfast" cone="elliptic" impratio="4" iterations="60" ls_iterations="20" gravity="0 0 -9.81"/>
@@ -333,8 +335,7 @@ ${cabinetXml(opts.guardH ?? CABINET.guardH)}
   <joint name="gantry_x" type="slide" axis="1 0 0" range="${v(travel.x0, travel.x1)}" damping="4" armature="0.05"/>
   <joint name="gantry_y" type="slide" axis="0 1 0" range="${v(travel.y0, travel.y1)}" damping="4" armature="0.05"/>
   <geom name="gantry_carriage" type="box" pos="0 0 0.03" size="0.06 0.05 0.03" mass="2.2" rgba="0.95 0.8 0.15 1" contype="0" conaffinity="0"/>
-  <geom name="gantry_tube" type="cylinder" pos="${v(0, 0, -0.065)}" size="${v(0.022 * Math.max(1, s), 0.025)}" mass="0.05" rgba="0.95 0.8 0.15 1" contype="2" conaffinity="2"/>
-  <site name="pulley" pos="0 0 -0.02" size="0.004"/>
+  <site name="pulley" pos="${v(0, 0, CABINET.pulleyZ)}" size="0.004"/>
   <!-- 防甩片: bent plate under the gantry the claw hits on the way up. -->
   ${antiSwingXml(claw)}
 </body>

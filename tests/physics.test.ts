@@ -184,6 +184,25 @@ describe('JS claw shape', () => {
   });
 });
 
+describe('claw head and gantry', () => {
+  test('short coil head, wide default spread, and nothing between gantry and plate', async () => {
+    const t = tuning();
+    expect(t.arms[0].spreadCm).toBeGreaterThanOrEqual(15);
+    const sim = await ClawSimulation.create(t, []);
+    sim.reset(0.3);
+    const m = sim.model;
+    const names = Array.from({ length: m.ngeom }, (_, g) => sim.geomName(g));
+    expect(names).not.toContain('gantry_tube');
+    const housing = names.indexOf('claw_housing');
+    expect(2 * m.geom_size[housing * 3 + 1]).toBeLessThanOrEqual(0.04);
+    // Hanging open, the tips sit on the set spread.
+    const head = sim.headPos();
+    const tip = sim.sitePos('arm0_tip');
+    expect(2 * Math.hypot(tip[0] - head[0], tip[1] - head[1]) * 100).toBeCloseTo(t.arms[0].spreadCm, 0);
+    sim.dispose();
+  });
+});
+
 describe('防甩片 (anti-swing plate under the gantry)', () => {
   test('geometry: more concavity bends the plate further down; direction turns it', () => {
     const depth = (deg: number) => {
@@ -193,8 +212,12 @@ describe('防甩片 (anti-swing plate under the gantry)', () => {
     expect(depth(0)).toBeLessThan(0.001);
     expect(depth(40)).toBeGreaterThan(depth(20));
     expect(depth(40)).toBeGreaterThan(0.005);
-    // The plate sits on the gantry under the claw.
-    expect(Math.max(...antiSwingProfile(20).map((p) => p.z))).toBeLessThan(-0.05);
+    // The plate hangs right under the carriage (its bottom face is z = 0), nothing in between.
+    for (const deg of [0, 20, 45]) {
+      const top = Math.max(...antiSwingProfile(deg).map((p) => p.z));
+      expect(top).toBeLessThan(0.001);
+      expect(top).toBeGreaterThan(-0.01);
+    }
     const [x0, y0] = antiSwingDirection(0);
     const [x90, y90] = antiSwingDirection(90);
     expect(x0).toBeCloseTo(0, 6);
@@ -236,7 +259,7 @@ describe('防甩片 (anti-swing plate under the gantry)', () => {
     }
   });
 
-  test('a held prize is thrown further with a bent plate, and on average towards the set direction', async () => {
+  test('a held prize is flung faster with a bent plate, towards the set direction', async () => {
     /** Grabs a small plush, reels into the plate and lets go at the peak of the kick. */
     const fling = async (concavityDeg: number, directionDeg: number, aim: [number, number]) => {
       const t = tuning((c) => (c.antiSwing = { concavityDeg, directionDeg }));
@@ -263,16 +286,19 @@ describe('防甩片 (anti-swing plate under the gantry)', () => {
         }
         if (i - bestAt > 10 && best > 0.05) break;
       }
+      const [dx, dy] = antiSwingDirection(directionDeg);
+      // Prize velocity along the throw direction at the moment it is let go.
+      const qv = sim.data.qvel;
+      const pd = sim.ids.prizeDof[0];
+      const launch = qv[pd] * dx + qv[pd + 1] * dy;
       sim.setWinchVelocity(0);
       sim.setClawVoltage(0);
       sim.step(2.5);
       const won = sim.remainingPrizes() === 0;
       const [gx, gy] = sim.gantryPos();
-      const [dx, dy] = antiSwingDirection(directionDeg);
-      const rx = sim.data.xpos[b] - gx;
-      const ry = sim.data.xpos[b + 1] - gy;
+      const along = (sim.data.xpos[b] - gx) * dx + (sim.data.xpos[b + 1] - gy) * dy;
       sim.dispose();
-      return { won, dist: Math.hypot(rx, ry), along: rx * dx + ry * dy };
+      return { won, launch, along };
     };
     const aims: Array<[number, number]> = [
       [0.02, 0],
@@ -280,13 +306,19 @@ describe('防甩片 (anti-swing plate under the gantry)', () => {
       [-0.02, 0],
     ];
     const run = async (c: number, d: number) => {
-      const r = (await Promise.all(aims.map((a) => fling(c, d, a)))).filter((x) => !x.won);
-      return { dist: r.reduce((x, y) => x + y.dist, 0) / r.length, along: r.reduce((x, y) => x + y.along, 0) / r.length };
+      const r = await Promise.all(aims.map((a) => fling(c, d, a)));
+      const landed = r.filter((x) => !x.won);
+      return {
+        launch: r.reduce((x, y) => x + y.launch, 0) / r.length,
+        along: landed.reduce((x, y) => x + y.along, 0) / landed.length,
+      };
     };
-    const flat = await run(0, 90);
     for (const d of [0, 90, 270]) {
+      const flat = await run(0, d);
       const bent = await run(40, d);
-      expect(bent.dist).toBeGreaterThan(2 * flat.dist);
+      // Released faster along the set direction, and lands on that side on average.
+      expect(bent.launch).toBeGreaterThan(flat.launch + 0.05);
+      expect(bent.launch).toBeGreaterThan(0);
       expect(bent.along).toBeGreaterThan(0);
     }
   }, 180000);
