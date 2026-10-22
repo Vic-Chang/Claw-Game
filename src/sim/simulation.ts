@@ -1,6 +1,6 @@
 import { CABINET, overHole } from './cabinet';
 import { type ClawTuning, cloneClawTuning, sleeveSpec } from './clawConfig';
-import { ARM_COUNT, armGeometry, buildMjcf } from './mjcf';
+import { ARM_COUNT, HEAD, armGeometry, buildMjcf } from './mjcf';
 import { getMujoco, type Mujoco } from './mujoco';
 import { PRIZE_KINDS, type PrizePlacement } from './prizes';
 import { Solenoid } from './solenoid';
@@ -174,7 +174,7 @@ export class ClawSimulation {
     const a = this.ids.headQ;
     q[a] = x;
     q[a + 1] = y;
-    q[a + 2] = CABINET.gantryZ - 0.02 - this.ropeLen - 0.044 * s;
+    q[a + 2] = CABINET.gantryZ - 0.02 - this.ropeLen - HEAD.ropeOffset * s;
     q[a + 3] = 1;
     q[a + 4] = 0;
     q[a + 5] = 0;

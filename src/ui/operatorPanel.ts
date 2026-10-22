@@ -14,7 +14,7 @@ import {
   spreadRange,
 } from '../sim/clawConfig';
 import { CABINET } from '../sim/cabinet';
-import { ARM_ANGLES, antiSwingDirection, antiSwingProfile, armGeometry } from '../sim/mjcf';
+import { ARM_ANGLES, HEAD, antiSwingDirection, antiSwingProfile, armGeometry } from '../sim/mjcf';
 import { PRIZE_KINDS, type PrizeCounts, type PrizeKind } from '../sim/prizes';
 import { torqueAtVoltage } from '../sim/solenoid';
 import type { DebugInfo } from '../worker/protocol';
@@ -419,7 +419,7 @@ export class OperatorPanel {
         top += `<line x1="${Math.cos(ang) * g.hingeR * sc}" y1="${-Math.sin(ang) * g.hingeR * sc}" x2="${Math.cos(ang) * r}" y2="${-Math.sin(ang) * r}" stroke="#e8e8ee" stroke-width="5" stroke-linecap="round"/>`;
         top += `<circle cx="${Math.cos(ang) * r}" cy="${-Math.sin(ang) * r}" r="5" fill="#111"/>`;
       });
-      top += `<circle r="${0.03 * s * sc}" fill="#e0338c"/>`;
+      top += `<circle r="${HEAD.radius * s * sc}" fill="#e0338c"/>`;
       const u0 = profile[0].u - profile[0].len / 2;
       const u1 = profile[profile.length - 1].u + profile[profile.length - 1].len / 2;
       const deg = (Math.atan2(-dy, dx) * 180) / Math.PI;
@@ -440,9 +440,9 @@ export class OperatorPanel {
         .join(' ');
       side += `<path d="${plate}" stroke="#7fd3ff" stroke-width="4" fill="none" stroke-linejoin="round"/>`;
       const capTop = -0.02 - CABINET.ropeTop;
-      const headC = capTop - 0.044 * s;
+      const headC = capTop - HEAD.ropeOffset * s;
       side += `<line x1="0" y1="${17}" x2="0" y2="${-capTop * sc}" stroke="#888" stroke-width="2"/>`;
-      side += `<rect x="${-0.03 * s * sc}" y="${-(headC + 0.035 * s) * sc}" width="${0.06 * s * sc}" height="${0.07 * s * sc}" fill="#e0338c"/>`;
+      side += `<rect x="${-HEAD.radius * s * sc}" y="${-(headC + HEAD.halfHeight * s) * sc}" width="${2 * HEAD.radius * s * sc}" height="${2 * HEAD.halfHeight * s * sc}" fill="#e0338c"/>`;
       side += `<line x1="20" y1="${-(headC - 0.02) * sc}" x2="80" y2="${-(headC - 0.02) * sc}" stroke="#ffcf1a" stroke-width="4"/><path d="M80,${-(headC - 0.02) * sc - 8} L96,${-(headC - 0.02) * sc} L80,${-(headC - 0.02) * sc + 8} Z" fill="#ffcf1a"/>`;
       side += `<text x="0" y="186" fill="#b9acd3" font-size="11" text-anchor="middle">側視：爪子到頂撞防甩片 → 往箭頭方向丟</text></svg>`;
       preview.innerHTML = top + side;

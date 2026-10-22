@@ -197,7 +197,9 @@ export class MachineScene {
     this.dynamicRoot.clear();
     this.geomObjects = [];
     const metal = new THREE.MeshStandardMaterial({ color: '#d5d6dc', metalness: 0.85, roughness: 0.28 });
-    const pinkMetal = new THREE.MeshStandardMaterial({ color: '#e0338c', metalness: 0.5, roughness: 0.35 });
+    // JS claw finish: black anodised housing and arms, gold clamp rings and hub.
+    const blackMetal = new THREE.MeshStandardMaterial({ color: '#17171a', metalness: 0.6, roughness: 0.32 });
+    const goldMetal = new THREE.MeshStandardMaterial({ color: '#e8a91c', metalness: 0.85, roughness: 0.25 });
     const rubber = new THREE.MeshStandardMaterial({ color: '#1b1b1d', roughness: 0.9 });
     const fabric = new THREE.MeshStandardMaterial({ map: fabricTexture(), roughness: 1 });
     const glass = new THREE.MeshPhysicalMaterial({ color: '#dff1ff', transparent: true, opacity: 0.1, roughness: 0.05, metalness: 0, depthWrite: false });
@@ -222,8 +224,9 @@ export class MachineScene {
       else if (n.startsWith('chute_')) mat = chute;
       else if (n.startsWith('gantry_')) mat = yellow;
       else if (n.endsWith('_sleeve')) mat = rubber;
-      else if (n === 'claw_housing') mat = pinkMetal;
-      else if (n.startsWith('claw_') || n.startsWith('arm') || n.startsWith('antiswing_')) mat = metal;
+      else if (n === 'claw_housing' || n === 'claw_cap' || /^arm\d_seg/.test(n)) mat = blackMetal;
+      else if (n.startsWith('claw_ring') || n === 'claw_hub') mat = goldMetal;
+      else if (n.startsWith('claw_') || n.startsWith('antiswing_')) mat = metal;
       else if (prize >= 0 && n.endsWith('_box')) {
         if (!boxMats.has(prize)) {
           const kind = prizeKinds[prize];

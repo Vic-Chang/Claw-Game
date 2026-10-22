@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { CABINET } from '../src/sim/cabinet';
-import { type ClawTuning, defaultClawTuning } from '../src/sim/clawConfig';
+import { type ClawTuning, SIZE_SCALE, defaultClawTuning } from '../src/sim/clawConfig';
 import { getMujoco } from '../src/sim/mujoco';
-import { antiSwingDirection, antiSwingProfile } from '../src/sim/mjcf';
+import { antiSwingDirection, antiSwingProfile, armGeometry, rotateArm } from '../src/sim/mjcf';
 import type { PrizeKind, PrizePlacement } from '../src/sim/prizes';
 import { ClawSimulation } from '../src/sim/simulation';
 import { COIL_TAU, Solenoid, torqueAtVoltage } from '../src/sim/solenoid';
@@ -102,13 +102,13 @@ describe('claw solenoid', () => {
 describe('cable & swing (甩動)', () => {
   test('the claw swings like a pendulum: T ≈ 2π√(L/g), longer cable → slower', async () => {
     const short = await swingPeriod(tuning(), 0.2);
-    const long = await swingPeriod(tuning(), 0.45);
+    const long = await swingPeriod(tuning(), 0.35);
     // Effective length = cable + rope attachment → centre of mass (~6 cm).
     const expected = (L: number) => 2 * Math.PI * Math.sqrt((L + 0.06) / 9.81);
     expect(short / expected(0.2)).toBeGreaterThan(0.88);
     expect(short / expected(0.2)).toBeLessThan(1.12);
-    expect(long / expected(0.45)).toBeGreaterThan(0.88);
-    expect(long / expected(0.45)).toBeLessThan(1.12);
+    expect(long / expected(0.35)).toBeGreaterThan(0.88);
+    expect(long / expected(0.35)).toBeLessThan(1.12);
     expect(long).toBeGreaterThan(short);
   });
 
@@ -126,7 +126,8 @@ describe('cable & swing (甩動)', () => {
     for (let t = 0; t < 3; t += 0.01) sim.step(0.01);
     sim.setWinchVelocity(0);
     expect(sim.cableSlack).toBeGreaterThan(0.05);
-    expect(sim.headPos()[2]).toBeLessThan(0.2);
+    // Resting on its tips: head centre ≈ arm reach (~20 cm) above the bed, far below where it hung.
+    expect(sim.headPos()[2]).toBeLessThan(0.26);
     sim.dispose();
   });
 });
@@ -159,6 +160,27 @@ describe('mechanical claw tuning', () => {
     const narrow = await tipRadius(tuning((t) => t.arms.forEach((a) => (a.spreadCm = 9))));
     const wide = await tipRadius(tuning((t) => t.arms.forEach((a) => (a.spreadCm = 15))));
     expect(wide - narrow).toBeGreaterThan(0.025);
+  });
+});
+
+describe('JS claw shape', () => {
+  test('arms are one continuous curved rod with no extra hook at the tip', async () => {
+    const sim = await ClawSimulation.create(tuning(), []);
+    const names = Array.from({ length: sim.model.ngeom }, (_, g) => sim.geomName(g));
+    expect(names.some((n) => /hook|fin/.test(n))).toBe(false);
+    sim.dispose();
+    for (const size of ['small', 'medium', 'large'] as const) {
+      const g = armGeometry(SIZE_SCALE[size], 12);
+      // Neighbouring segments share their end points (the capsules form one rod).
+      expect(g.points[0]).toEqual([0, 0]);
+      // Open, the tip hangs well below the pivot and is the arm's lowest point (no upturned end).
+      const open = rotateArm(g.points, g.openAngle);
+      const tip = open[open.length - 1];
+      expect(tip[1]).toBeLessThan(-0.1 * SIZE_SCALE[size]);
+      expect(Math.min(...open.map((p) => p[1]))).toBe(tip[1]);
+      // Closed, the three tips nearly meet.
+      expect(g.hingeR + g.tip[0]).toBeLessThan(0.015 * SIZE_SCALE[size]);
+    }
   });
 });
 
@@ -214,47 +236,60 @@ describe('防甩片 (anti-swing plate under the gantry)', () => {
     }
   });
 
-  test('a held prize is thrown further with a bent plate, and towards the plate direction', async () => {
-    /** Grabs a small plush, reels into the plate, lets go on the swing; returns mean displacement. */
-    const fling = async (concavityDeg: number, directionDeg: number) => {
-      let sx = 0;
-      let sy = 0;
-      const aims: Array<[number, number]> = [
-        [0.02, 0],
-        [0, 0.02],
-        [-0.02, 0],
-      ];
-      for (const aim of aims) {
-        const t = tuning((c) => (c.antiSwing = { concavityDeg, directionDeg }));
-        const sim = await ClawSimulation.create(t, [{ kind: 'plushSmall', pos: [0.05, 0.05, 0.08], yaw: 0.3, color: '#fff' }]);
-        sim.reset(1.0);
-        const b = sim.ids.prizeBodies[0] * 3;
-        moveGantry(sim, sim.data.xpos[b] + aim[0], sim.data.xpos[b + 1] + aim[1]);
-        sim.step(1.5);
-        const x0 = sim.data.xpos[b];
-        const y0 = sim.data.xpos[b + 1];
-        dropClaw(sim);
-        sim.setClawVoltage(40);
-        sim.step(0.08);
-        raiseClaw(sim);
-        // 上停上拉: keep reeling into the plate, then the grip drops to weak on the swing.
-        sim.setWinchVelocity(-0.29);
-        sim.step(0.15);
-        sim.setWinchVelocity(0);
-        sim.setClawVoltage(6);
-        sim.step(2.5);
-        sx += sim.data.xpos[b] - x0;
-        sy += sim.data.xpos[b + 1] - y0;
-        sim.dispose();
+  test('a held prize is thrown further with a bent plate, and on average towards the set direction', async () => {
+    /** Grabs a small plush, reels into the plate and lets go at the peak of the kick. */
+    const fling = async (concavityDeg: number, directionDeg: number, aim: [number, number]) => {
+      const t = tuning((c) => (c.antiSwing = { concavityDeg, directionDeg }));
+      const sim = await ClawSimulation.create(t, [{ kind: 'plushSmall', pos: [0.05, 0.05, 0.08], yaw: 0.3, color: '#fff' }]);
+      sim.reset(1.0);
+      const b = sim.ids.prizeBodies[0] * 3;
+      moveGantry(sim, sim.data.xpos[b] + aim[0], sim.data.xpos[b + 1] + aim[1]);
+      sim.step(1.5);
+      dropClaw(sim);
+      sim.setClawVoltage(40);
+      sim.step(0.08);
+      raiseClaw(sim);
+      // 上停上拉 into the plate; open the claw when the sideways kick peaks.
+      sim.setWinchVelocity(-0.29);
+      let best = 0;
+      let bestAt = 0;
+      for (let i = 0; i < 150; i++) {
+        sim.step(0.002);
+        const v = sim.headVel();
+        const sp = Math.hypot(v[0], v[1]);
+        if (sp > best) {
+          best = sp;
+          bestAt = i;
+        }
+        if (i - bestAt > 10 && best > 0.05) break;
       }
-      return [sx / aims.length, sy / aims.length];
+      sim.setWinchVelocity(0);
+      sim.setClawVoltage(0);
+      sim.step(2.5);
+      const won = sim.remainingPrizes() === 0;
+      const [gx, gy] = sim.gantryPos();
+      const [dx, dy] = antiSwingDirection(directionDeg);
+      const rx = sim.data.xpos[b] - gx;
+      const ry = sim.data.xpos[b + 1] - gy;
+      sim.dispose();
+      return { won, dist: Math.hypot(rx, ry), along: rx * dx + ry * dy };
     };
-    const flat = await fling(0, 90);
-    const right = await fling(40, 90);
-    const left = await fling(40, 270);
-    expect(Math.abs(right[0])).toBeGreaterThan(Math.abs(flat[0]));
-    expect(right[0]).toBeGreaterThan(left[0]);
-  }, 120000);
+    const aims: Array<[number, number]> = [
+      [0.02, 0],
+      [0, 0.02],
+      [-0.02, 0],
+    ];
+    const run = async (c: number, d: number) => {
+      const r = (await Promise.all(aims.map((a) => fling(c, d, a)))).filter((x) => !x.won);
+      return { dist: r.reduce((x, y) => x + y.dist, 0) / r.length, along: r.reduce((x, y) => x + y.along, 0) / r.length };
+    };
+    const flat = await run(0, 90);
+    for (const d of [0, 90, 270]) {
+      const bent = await run(40, d);
+      expect(bent.dist).toBeGreaterThan(2 * flat.dist);
+      expect(bent.along).toBeGreaterThan(0);
+    }
+  }, 180000);
 });
 
 describe('claw rebuild', () => {

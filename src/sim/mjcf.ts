@@ -13,13 +13,42 @@ export const ARM_COUNT = 3;
 /** Arm 0 points to the back (+y); the others follow counter-clockwise. */
 export const ARM_ANGLES = [90, 210, 330].map((d) => (d * Math.PI) / 180);
 
+/** JS claw head dimensions at scale 1 (metres): slim coil housing, plunger rod and hub. */
+export const HEAD = {
+  radius: 0.025,
+  halfHeight: 0.045,
+  /** Cable attachment above the head centre (top of the cap). */
+  ropeOffset: 0.052,
+  /** Hub carrying the arm pivots, below the housing. */
+  hubZ: -0.075,
+  hingeR: 0.015,
+};
+
+/**
+ * Arm shape from photos of a real JS claw, open as it hangs (x radial outward, z up, hinge
+ * at the origin): one continuous bent rod — out from the hub, a smooth curve down, then
+ * almost straight down with the tip turned in only slightly. No extra hook at the end.
+ */
+const ARM_SHAPE: Array<[number, number]> = [
+  [0, 0],
+  [0.022, -0.006],
+  [0.04, -0.02],
+  [0.05, -0.042],
+  [0.053, -0.07],
+  [0.05, -0.1],
+  [0.044, -0.125],
+];
+/** Tip distance from the claw axis when fully closed: the three tips nearly touch. */
+const CLOSED_TIP_RADIUS = 0.009;
+
 /** Geometry of one claw arm in its local frame (x radial outward, z up), metres. */
 export interface ArmGeometry {
   scale: number;
   /** Hinge offset from the head axis. */
   hingeR: number;
   hingeZ: number;
-  elbow: [number, number];
+  /** Rod centre line in the closed pose (hinge angle 0), hinge first, tip last. */
+  points: Array<[number, number]>;
   tip: [number, number];
   /** Hinge angle (rad) at full open. */
   openAngle: number;
@@ -27,29 +56,33 @@ export interface ArmGeometry {
   lever: number;
 }
 
-export function armGeometry(scale: number, spreadCm: number): ArmGeometry {
-  const hingeR = 0.03 * scale;
-  const elbow: [number, number] = [0.03 * scale, -0.065 * scale];
-  const tip: [number, number] = [-0.006 * scale, -0.125 * scale];
-  const target = spreadCm / 200;
-  // Opening rotates the arm outward about the tangential axis: x' = x cos q − z sin q.
-  const tipRadius = (q: number) => hingeR + tip[0] * Math.cos(q) - tip[1] * Math.sin(q);
-  let lo = 0;
-  let hi = 1.4;
-  for (let i = 0; i < 50; i++) {
+/** Rotates arm points about the hinge; + swings the tip outward (opens). */
+export function rotateArm(points: Array<[number, number]>, q: number): Array<[number, number]> {
+  const c = Math.cos(q);
+  const sn = Math.sin(q);
+  return points.map(([x, z]) => [x * c - z * sn, x * sn + z * c]);
+}
+
+function solveAngle(radius: (q: number) => number, target: number, lo: number, hi: number): number {
+  // radius() grows with q over the search range.
+  for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (tipRadius(mid) < target) lo = mid;
+    if (radius(mid) < target) lo = mid;
     else hi = mid;
   }
-  return {
-    scale,
-    hingeR,
-    hingeZ: -0.035 * scale,
-    elbow,
-    tip,
-    openAngle: (lo + hi) / 2,
-    lever: Math.hypot(tip[0], tip[1]),
-  };
+  return (lo + hi) / 2;
+}
+
+export function armGeometry(scale: number, spreadCm: number): ArmGeometry {
+  const hingeR = HEAD.hingeR * scale;
+  const shape = ARM_SHAPE.map(([x, z]) => [x * scale, z * scale] as [number, number]);
+  const tipRadius = (pts: Array<[number, number]>, q: number) => hingeR + rotateArm([pts[pts.length - 1]], q)[0][0];
+  // Closed pose: swing the photographed shape inward until the tips nearly meet.
+  const close = solveAngle((q) => tipRadius(shape, q), CLOSED_TIP_RADIUS * scale, -1.2, 0);
+  const points = rotateArm(shape, close);
+  const openAngle = solveAngle((q) => tipRadius(points, q), spreadCm / 200, 0, 1.6);
+  const tip = points[points.length - 1];
+  return { scale, hingeR, hingeZ: HEAD.hubZ * scale, points, tip, openAngle, lever: Math.hypot(tip[0], tip[1]) };
 }
 
 const f = (n: number) => (Math.abs(n) < 1e-9 ? '0' : n.toFixed(5).replace(/0+$/, '').replace(/\.$/, ''));
@@ -72,39 +105,48 @@ function clawXml(t: ClawTuning): string {
   const sleeve = sleeveSpec(t);
   const headMass = 0.3 * s ** 3;
   const armMass = 0.028 * s ** 3;
+  const metal = 'friction="0.3 0.003 0.0001"';
+  const black = 'rgba="0.1 0.1 0.11 1"';
+  const gold = 'rgba="0.93 0.68 0.12 1"';
   const out: string[] = [];
-  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ - 0.02 - CABINET.ropeTop - 0.044 * s)}">`);
+  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ - 0.02 - CABINET.ropeTop - HEAD.ropeOffset * s)}">`);
   out.push(`<joint name="claw_free" type="free" damping="0.1"/>`);
-  out.push(`<geom name="claw_housing" priority="1" type="cylinder" size="${v(0.03 * s, 0.035 * s)}" mass="${f(headMass * 0.8)}" rgba="0.85 0.2 0.55 1" contype="3" conaffinity="3" friction="0.3 0.003 0.0001"/>`);
-  out.push(`<geom name="claw_cap" priority="1" type="cylinder" pos="${v(0, 0, 0.038 * s)}" size="${v(0.014 * s, 0.006 * s)}" mass="${f(headMass * 0.1)}" rgba="0.75 0.75 0.78 1" contype="3" conaffinity="3"/>`);
-  out.push(`<geom name="claw_ring" priority="1" type="cylinder" pos="${v(0, 0, -0.03 * s)}" size="${v(0.036 * s, 0.006 * s)}" mass="${f(headMass * 0.1)}" rgba="0.6 0.6 0.65 1" contype="1" conaffinity="1"/>`);
-  out.push(`<site name="rope_bot" pos="${v(0, 0, 0.044 * s)}" size="0.003"/>`);
+  // Coil housing with its two clamp rings, the cap the cable is tied to, the plunger rod and the hub.
+  out.push(`<geom name="claw_housing" priority="1" type="cylinder" size="${v(HEAD.radius * s, HEAD.halfHeight * s)}" mass="${f(headMass * 0.72)}" ${black} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_ringTop" priority="1" type="cylinder" pos="${v(0, 0, 0.012 * s)}" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.04)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_ringLow" priority="1" type="cylinder" pos="${v(0, 0, -0.012 * s)}" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.04)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_cap" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.halfHeight + 0.0035) * s)}" size="${v(0.014 * s, 0.0035 * s)}" mass="${f(headMass * 0.04)}" ${black} contype="3" conaffinity="3"/>`);
+  out.push(`<geom name="claw_rod" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" size="${v(0.005 * s, (-HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" mass="${f(headMass * 0.04)}" rgba="0.8 0.8 0.84 1" ${metal}/>`);
+  out.push(`<geom name="claw_hub" priority="1" type="box" pos="${v(0, 0, HEAD.hubZ * s)}" size="${v(0.016 * s, 0.016 * s, 0.007 * s)}" mass="${f(headMass * 0.12)}" ${gold} ${metal}/>`);
+  out.push(`<site name="rope_bot" pos="${v(0, 0, HEAD.ropeOffset * s)}" size="0.003"/>`);
 
   for (let i = 0; i < ARM_COUNT; i++) {
     const g = armGeometry(s, t.arms[i].spreadCm);
     const phi = ARM_ANGLES[i];
-    const [ex, ez] = g.elbow;
+    const pts = g.points;
+    const lengths = pts.slice(1).map((p, k) => Math.hypot(p[0] - pts[k][0], p[1] - pts[k][1]));
+    const total = lengths.reduce((x, y) => x + y, 0);
     const [tx, tz] = g.tip;
-    const sl = 0.55;
-    const sx = ex + (tx - ex) * sl;
-    const sz = ez + (tz - ez) * sl;
     out.push(`<body name="arm${i}" pos="${v(g.hingeR * Math.cos(phi), g.hingeR * Math.sin(phi), g.hingeZ)}" euler="0 0 ${f(phi)}">`);
     out.push(
       `<joint name="arm${i}_hinge" type="hinge" axis="0 -1 0" range="${v(-0.02, g.openAngle)}" limited="true" ` +
         `stiffness="${f(ARM_SPRING)}" springref="${f(g.openAngle + ARM_SPRING_PRELOAD)}" damping="0.0015" armature="0.00005"/>`,
     );
-    out.push(`<geom name="arm${i}_upper" priority="1" type="capsule" fromto="${v(0, 0, 0, ex, 0, ez)}" size="${f(0.0045 * s)}" mass="${f(armMass * 0.45)}" rgba="0.82 0.82 0.86 1" friction="0.3 0.003 0.0001"/>`);
-    out.push(`<geom name="arm${i}_lower" priority="1" type="capsule" fromto="${v(ex, 0, ez, sx, 0, sz)}" size="${f(0.004 * s)}" mass="${f(armMass * 0.25)}" rgba="0.82 0.82 0.86 1" friction="0.3 0.003 0.0001"/>`);
-    out.push(
-      `<geom name="arm${i}_sleeve" priority="1" type="capsule" fromto="${v(sx, 0, sz, tx, 0, tz)}" size="${f(0.0062 * s)}" mass="${f(armMass * 0.15)}" ` +
-        `rgba="0.15 0.15 0.15 1" condim="6" friction="${v(...sleeve.friction)}" solref="${v(sleeve.solrefTime, 1)}"/>`,
-    );
-    // Inward tip hook: the flat metal foot at the end of each JS-claw arm.
-    const hookLen = 0.0165 * s;
-    out.push(
-      `<geom name="arm${i}_hook" priority="1" type="box" pos="${v(tx - hookLen / 2, 0, tz)}" size="${v(hookLen / 2, 0.0075 * s, 0.0012 * s)}" ` +
-        `mass="${f(armMass * 0.15)}" rgba="0.9 0.9 0.94 1" friction="0.3 0.003 0.0001"/>`,
-    );
+    // The rod as a chain of capsules along the curve; the last one wears the rubber sleeve.
+    const last = pts.length - 2;
+    for (let k = 0; k <= last; k++) {
+      const [x0, z0] = pts[k];
+      const [x1, z1] = pts[k + 1];
+      const mass = f((armMass * lengths[k]) / total);
+      if (k < last) {
+        out.push(`<geom name="arm${i}_seg${k}" priority="1" type="capsule" fromto="${v(x0, 0, z0, x1, 0, z1)}" size="${f(0.0042 * s)}" mass="${mass}" ${black} ${metal}/>`);
+      } else {
+        out.push(
+          `<geom name="arm${i}_sleeve" priority="1" type="capsule" fromto="${v(x0, 0, z0, x1, 0, z1)}" size="${f(0.0062 * s)}" mass="${mass}" ` +
+            `rgba="0.15 0.15 0.15 1" condim="6" friction="${v(...sleeve.friction)}" solref="${v(sleeve.solrefTime, 1)}"/>`,
+        );
+      }
+    }
     out.push(`<site name="arm${i}_tip" pos="${v(tx, 0, tz)}" size="0.002"/>`);
     out.push(`</body>`);
   }
