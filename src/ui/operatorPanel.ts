@@ -248,9 +248,23 @@ export class OperatorPanel {
           this.tableInputs.set(d.code, sel);
           cell.append(sel);
         } else if (d.kind === 'action') {
+          // Two-step confirm in the page itself (browser dialogs are not available everywhere).
           const btn = el('button', {}, '執行');
+          let armed = 0;
           btn.addEventListener('click', () => {
-            if (confirm(`確定執行「${d.label}」？`)) this.runAction(d.code);
+            if (armed) {
+              window.clearTimeout(armed);
+              armed = 0;
+              btn.textContent = '已執行';
+              this.runAction(d.code);
+              window.setTimeout(() => (btn.textContent = '執行'), 1500);
+              return;
+            }
+            btn.textContent = '再按一次確認';
+            armed = window.setTimeout(() => {
+              armed = 0;
+              btn.textContent = '執行';
+            }, 3000);
           });
           cell.append(btn);
         } else {
