@@ -427,7 +427,8 @@ table.params select,
   font-size: 14px;
 }
 
-.field input[type='range'] {
+.field input[type='range'],
+.field select {
   width: 100%;
 }
 

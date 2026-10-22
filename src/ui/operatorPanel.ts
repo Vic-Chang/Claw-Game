@@ -366,9 +366,9 @@ export class OperatorPanel {
 
     const drawPreview = () => {
       const s = SIZE_SCALE[c.size];
-      const sc = 900;
+      const sc = 850;
       // Top view: tip circle and fin directions.
-      let top = `<svg width="200" height="200" viewBox="-100 -100 200 200"><circle r="${0.036 * s * sc}" fill="#e0338c"/>`;
+      let top = `<svg width="200" height="200" viewBox="-100 -100 200 200"><circle r="${(spreadRange(c.size)[1] / 200) * sc}" fill="none" stroke="#3a2f55" stroke-dasharray="3 4"/><circle r="${0.022 * s * sc}" fill="#e0338c"/>`;
       c.arms.forEach((a, i) => {
         const g = armGeometry(s, a.spreadCm);
         const r = (a.spreadCm / 200) * sc;
@@ -379,7 +379,7 @@ export class OperatorPanel {
         const hy = -Math.sin(ang) * g.hingeR * sc;
         const fd = ang + Math.PI + (a.finDirectionDeg * Math.PI) / 180;
         const fl = 0.0165 * s * sc * Math.cos((a.finConcavityDeg * Math.PI) / 360);
-        top += `<line x1="${hx}" y1="${hy}" x2="${x}" y2="${y}" stroke="#ddd" stroke-width="4"/>`;
+        top += `<line x1="${hx}" y1="${hy}" x2="${x}" y2="${y}" stroke="#e8e8ee" stroke-width="5" stroke-linecap="round"/>`;
         top += `<line x1="${x}" y1="${y}" x2="${x + Math.cos(fd) * fl}" y2="${y - Math.sin(fd) * fl}" stroke="#7fd3ff" stroke-width="6" stroke-linecap="round"/>`;
         top += `<circle cx="${x}" cy="${y}" r="5" fill="#111"/>`;
       });

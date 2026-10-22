@@ -7,7 +7,7 @@ import { boxTexture, cabinetArtTexture, fabricTexture, holoTexture } from './tex
 export type ViewName = 'front' | 'side' | 'top' | 'claw';
 
 const VIEWS: Record<Exclude<ViewName, 'claw'>, { pos: [number, number, number]; target: [number, number, number] }> = {
-  front: { pos: [0.0, -1.18, 0.78], target: [0, 0.02, 0.22] },
+  front: { pos: [0.0, -1.42, 0.82], target: [0, 0.0, 0.24] },
   side: { pos: [1.15, -0.25, 0.72], target: [-0.05, 0, 0.2] },
   top: { pos: [0.0, -0.25, 1.55], target: [0, 0, 0.1] },
 };
@@ -33,7 +33,7 @@ export class MachineScene {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);

@@ -17,6 +17,8 @@ let paused = false;
 let knocks: number[] = [];
 let pending: ToWorker[] = [];
 let costEma = 0;
+let awaitingAck = false;
+let heldEvents: BoardEvent[] = [];
 
 function post(msg: FromWorker, transfer: Transferable[] = []): void {
   ctx.postMessage(msg, transfer);
@@ -104,11 +106,15 @@ async function handle(msg: ToWorker): Promise<void> {
     case 'pause':
       paused = msg.paused;
       break;
+    case 'ack':
+      awaitingAck = false;
+      break;
   }
 }
 
 ctx.onmessage = (e: MessageEvent<ToWorker>) => {
-  pending.push(e.data);
+  if (e.data.type === 'ack') awaitingAck = false;
+  else pending.push(e.data);
 };
 
 let last = performance.now();
@@ -144,12 +150,17 @@ async function tick(): Promise<void> {
 
 function sendFrame(): void {
   if (!sim || !board) return;
+  // Keep board events until the page can take a frame; never queue frames up.
+  heldEvents.push(...board.takeEvents());
+  if (awaitingAck) return;
+  awaitingAck = true;
   const d = sim.data;
   const geomPos = new Float32Array(d.geom_xpos);
   const geomMat = new Float32Array(d.geom_xmat);
   const p0 = sim.sitePos('pulley');
   const p1 = sim.sitePos('rope_bot');
-  const events: BoardEvent[] = board.takeEvents();
+  const events = heldEvents;
+  heldEvents = [];
   post(
     {
       type: 'frame',

@@ -25,7 +25,9 @@ export type ToWorker =
   | { type: 'clearAccounts' }
   | { type: 'clearBank' }
   | { type: 'resetError' }
-  | { type: 'pause'; paused: boolean };
+  | { type: 'pause'; paused: boolean }
+  /** The page finished handling the last frame (back-pressure for slow devices). */
+  | { type: 'ack' };
 
 export interface DebugInfo {
   time: number;

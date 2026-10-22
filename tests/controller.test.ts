@@ -49,8 +49,8 @@ function run(board: Board, m: FakeMachine, seconds: number, until?: () => boolea
   }
 }
 
-function setup(overrides: Partial<Settings> = {}) {
-  const s = { ...defaultSettings(), ...overrides };
+function setup(overrides: Record<string, number> = {}) {
+  const s: Settings = { ...defaultSettings(), ...overrides };
   const board = new Board(s, () => 0.5);
   const m = new FakeMachine();
   return { board, m, s };
@@ -97,8 +97,8 @@ describe('Feiluoli board flow', () => {
     expect(medium.length).toBeGreaterThan(0);
     // Strong → medium happens B4 × step from the top.
     const firstMedium = m.voltLog.find(([, v]) => v === 20)!;
-    expect(firstMedium[0] - CABINET.ropeTop).toBeLessThanOrEqual(s.B4 * B4_STEP + 0.002);
-    expect(firstMedium[0] - CABINET.ropeTop).toBeGreaterThan(s.B4 * B4_STEP - 0.02);
+    expect(firstMedium[0] - CABINET.ropeTop).toBeLessThanOrEqual(s.B4! * B4_STEP + 0.002);
+    expect(firstMedium[0] - CABINET.ropeTop).toBeGreaterThan(s.B4! * B4_STEP - 0.02);
     expect(m.voltLog.some(([, v]) => v === 10)).toBe(true);
     expect(m.volts).toBe(0);
   });

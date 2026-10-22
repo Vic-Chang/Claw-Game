@@ -104,6 +104,7 @@ function lcdLines(b: BoardSnapshot): string[] {
 }
 
 let lastLcd = '';
+let lastPanel = 0;
 worker.onmessage = (e: MessageEvent<FromWorker>) => {
   const msg = e.data;
   switch (msg.type) {
@@ -125,7 +126,11 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
       board = msg.board;
       remaining = msg.remaining;
       hud.update(board, remaining, config.settings.A1a);
-      panel.update(board, msg.debug);
+      const now = performance.now();
+      if (now - lastPanel > 100) {
+        lastPanel = now;
+        panel.update(board, msg.debug);
+      }
       for (const ev of msg.events) {
         sound.boardEvent(ev);
         if (ev.type === 'win') showToast(`🎉 恭喜中獎！\n本次花費 ${ev.spent} 元`);
@@ -141,6 +146,7 @@ worker.onmessage = (e: MessageEvent<FromWorker>) => {
         drawLcd(scene.lcdCanvas, lines);
         scene.lcdUpdated();
       }
+      requestAnimationFrame(() => send({ type: 'ack' }));
       break;
     }
     case 'error':
@@ -181,5 +187,6 @@ loop();
     return [p[i * 3], p[i * 3 + 1], p[i * 3 + 2]];
   },
   geomNames: () => geomNames,
+  config,
   scene,
 };
