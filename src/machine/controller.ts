@@ -118,6 +118,8 @@ export class Board {
   private autoTimer = 5;
   private grabHoldTime = 0;
   private stallTime = 0;
+  /** Cable length the claw rests at between games: A12 回停下降 leaves it below the plate. */
+  private restLen: number = CABINET.ropeTop;
   private autoTarget: [number, number] | null = null;
   private rand: () => number;
 
@@ -417,7 +419,11 @@ export class Board {
         this.setVoltage('weak', io);
         const t = this.s('A12b') * 0.1;
         io.setWinchVelocity(this.stateTime < t ? WINCH_SPEED * (this.s('E5') / 100) : 0);
-        if (this.stateTime >= t) this.setState('releasing');
+        if (this.stateTime >= t) {
+          // Stays at this height from now on — the gap to the anti-swing plate is the point.
+          this.restLen = io.cableLimit;
+          this.setState('releasing');
+        }
         break;
       }
       case 'releasing': {
@@ -427,8 +433,10 @@ export class Board {
         break;
       }
       case 'rewind': {
-        io.setWinchVelocity(io.cableLimit > top + 1e-4 ? -WINCH_SPEED : 0);
-        if (io.cableLimit <= top + 1e-4 && this.stateTime > 0.3) this.endGame();
+        // Back to the rest height, not the top (A12 回停下降 is not reeled back in).
+        const diff = io.cableLimit - this.restLen;
+        io.setWinchVelocity(diff > 1e-4 ? -WINCH_SPEED : diff < -1e-4 ? WINCH_SPEED * 0.5 : 0);
+        if (Math.abs(diff) <= 1e-4 && this.stateTime > 0.3) this.endGame();
         break;
       }
       case 'error': {

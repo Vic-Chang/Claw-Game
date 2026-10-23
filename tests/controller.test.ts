@@ -172,6 +172,36 @@ describe('Feiluoli board flow', () => {
     });
     expect(minLen).toBeLessThan(CABINET.ropeTop);
     expect(lowered).toBeGreaterThan(0.1);
+    // 回停下降 is not reeled back in: the claw waits below the anti-swing plate.
+    expect(board.state).toBe('idle');
+    expect(m.cableLimit - CABINET.ropeTop).toBeCloseTo(lowered, 3);
+  });
+
+  test('回停下降 rest height holds across games; A12b = 0 rests at the top', () => {
+    for (const [a12b, expectGap] of [
+      [5, true],
+      [0, false],
+    ] as const) {
+      const { board, m } = setup({ A12a: 5, A12b: a12b });
+      const rests: number[] = [];
+      for (let g = 0; g < 2; g++) {
+        board.insertCoin();
+        board.pressGrab();
+        let pulled = false;
+        let reachedTop = false;
+        run(board, m, 30, () => {
+          if (board.state === 'topPull') pulled = true;
+          if (board.state === 'topWait' && m.cableLimit <= CABINET.ropeTop + 1e-4) reachedTop = true;
+          return board.state === 'idle';
+        });
+        expect(board.state).toBe('idle');
+        expect(pulled && reachedTop).toBe(true);
+        rests.push(m.cableLimit - CABINET.ropeTop);
+      }
+      expect(rests[1]).toBeCloseTo(rests[0], 3);
+      if (expectGap) expect(rests[0]).toBeGreaterThan(0.1);
+      else expect(rests[0]).toBeCloseTo(0, 3);
+    }
   });
 
   test('保夾: once 累加金額 reaches A3 the game runs on B5 all the way home', () => {
