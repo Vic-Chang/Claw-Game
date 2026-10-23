@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { B4_STEP, Board, type MachineIO } from '../src/machine/controller';
+import { B4_STEP, Board, HOME_LOWER_SPEED, type MachineIO } from '../src/machine/controller';
 import { defaultSettings, type Settings } from '../src/machine/settings';
 import { CABINET } from '../src/sim/cabinet';
 
@@ -159,22 +159,25 @@ describe('Feiluoli board flow', () => {
     expect(board.state).not.toBe('topWait');
   });
 
-  test('A12 上停上拉 reels into the stop tube; 回停下降 lowers before releasing', () => {
-    const { board, m } = setup({ A12a: 10, A12b: 5 });
-    board.insertCoin();
-    board.pressGrab();
-    let minLen = Infinity;
-    let lowered = 0;
-    run(board, m, 30, () => {
-      minLen = Math.min(minLen, m.cableLimit);
-      if (board.state === 'releasing') lowered = Math.max(lowered, m.cableLimit - CABINET.ropeTop);
-      return board.state === 'idle';
-    });
-    expect(minLen).toBeLessThan(CABINET.ropeTop);
-    expect(lowered).toBeGreaterThan(0.1);
-    // 回停下降 is not reeled back in: the claw waits below the anti-swing plate.
-    expect(board.state).toBe('idle');
-    expect(m.cableLimit - CABINET.ropeTop).toBeCloseTo(lowered, 3);
+  test('A12 上停上拉 reels into the stop tube; 回停下降 lowers A12b × 0.1 s at a fixed speed before releasing', () => {
+    for (const e5 of [50, 100]) {
+      const { board, m } = setup({ A12a: 10, A12b: 5, E5: e5 });
+      board.insertCoin();
+      board.pressGrab();
+      let minLen = Infinity;
+      let lowered = 0;
+      run(board, m, 30, () => {
+        minLen = Math.min(minLen, m.cableLimit);
+        if (board.state === 'releasing') lowered = Math.max(lowered, m.cableLimit - CABINET.ropeTop);
+        return board.state === 'idle';
+      });
+      expect(minLen).toBeLessThan(CABINET.ropeTop);
+      // 0.5 s at HOME_LOWER_SPEED, regardless of E5.
+      expect(Math.abs(lowered - 0.5 * HOME_LOWER_SPEED)).toBeLessThan(0.01);
+      // 回停下降 is not reeled back in: the claw waits below the anti-swing plate.
+      expect(board.state).toBe('idle');
+      expect(m.cableLimit - CABINET.ropeTop).toBeCloseTo(lowered, 3);
+    }
   });
 
   test('回停下降 rest height holds across games; A12b = 0 rests at the top', () => {
@@ -199,7 +202,7 @@ describe('Feiluoli board flow', () => {
         rests.push(m.cableLimit - CABINET.ropeTop);
       }
       expect(rests[1]).toBeCloseTo(rests[0], 3);
-      if (expectGap) expect(rests[0]).toBeGreaterThan(0.1);
+      if (expectGap) expect(Math.abs(rests[0] - 0.5 * HOME_LOWER_SPEED)).toBeLessThan(0.01);
       else expect(rests[0]).toBeCloseTo(0, 3);
     }
   });

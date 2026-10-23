@@ -56,6 +56,8 @@ export interface Accounts {
 /** Full-speed (100 %) mechanical speeds of the standard cabinet. */
 export const GANTRY_SPEED = 0.2; // m/s
 export const WINCH_SPEED = 0.32; // m/s
+/** A12 回停下降 lowers at this fixed speed, whatever E5 is set to. */
+export const HOME_LOWER_SPEED = 0.15; // m/s
 /** One step of 中壓距離頂點 in metres of cable from the top. */
 export const B4_STEP = 0.018;
 
@@ -418,7 +420,7 @@ export class Board {
         io.setGantryVelocity(0, 0);
         this.setVoltage('weak', io);
         const t = this.s('A12b') * 0.1;
-        io.setWinchVelocity(this.stateTime < t ? WINCH_SPEED * (this.s('E5') / 100) : 0);
+        io.setWinchVelocity(this.stateTime < t ? HOME_LOWER_SPEED : 0);
         if (this.stateTime >= t) {
           // Stays at this height from now on — the gap to the anti-swing plate is the point.
           this.restLen = io.cableLimit;
@@ -435,7 +437,7 @@ export class Board {
       case 'rewind': {
         // Back to the rest height, not the top (A12 回停下降 is not reeled back in).
         const diff = io.cableLimit - this.restLen;
-        io.setWinchVelocity(diff > 1e-4 ? -WINCH_SPEED : diff < -1e-4 ? WINCH_SPEED * 0.5 : 0);
+        io.setWinchVelocity(diff > 1e-4 ? -WINCH_SPEED : diff < -1e-4 ? HOME_LOWER_SPEED : 0);
         if (Math.abs(diff) <= 1e-4 && this.stateTime > 0.3) this.endGame();
         break;
       }
