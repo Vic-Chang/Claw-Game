@@ -5,10 +5,9 @@
 ## 目前狀態
 - **分支**：目前在 `ccr-1f646e6c-rflqvg` 開發推送（先前在 `claude/claw-machine-game-physics-lftkbq`，PR #1 已合併到 `main`）。尚未開新的 PR（使用者要求時再開）。
 - **測試網址**（Artifact，私人）：https://claude.ai/artifact/2gJB3MEdhskE36CRUWA2nD
-  - 最新內容到 Version 4：短爪頭、16 cm 爪距、防甩片貼在天車下方。
+  - 最新內容到 Version 5：含 A12b 回停下降修正（Version 4：短爪頭、16 cm 爪距、防甩片貼在天車下方）。
   - 程式改動後要重新建置並發布，步驟見 ARCHITECTURE「Artifact 發布」。
 - **測試**：38 項全部通過。
-- Artifact 尚未含 A12b 回停下降的修正，需要時重新建置發布。
 
 ## 最近完成（使用者回報並已修正）
 - A12b 回停下降：天車歸位後下降的那段不再收回，爪子停在該高度與防水片保持間隙，下一局從這裡開始（`controller.ts` 的 `restLen`；A12b=5 約 16 cm、10 約 32 cm）。
