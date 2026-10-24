@@ -67,7 +67,7 @@ export class Sound {
     this.tone(1760, 0.18, 'square', 0.1, 0.07);
   }
 
-  /** Claw bumping glass/tube/prizes — the "扣扣扣" from the video. */
+  /** Claw bumping glass/plate/prizes — the "扣扣扣" from the video. */
   knock(strength: number): void {
     const c = this.ctx;
     if (!c || !this.master) return;

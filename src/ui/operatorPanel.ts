@@ -8,12 +8,14 @@ import {
   SIZE_SCALE,
   SLEEVES,
   type SleeveMaterial,
+  DEFAULT_SPREAD_CM,
   cloneClawTuning,
+  defaultAntiSwing,
   sleeveSpec,
   spreadRange,
 } from '../sim/clawConfig';
 import { CABINET } from '../sim/cabinet';
-import { ARM_ANGLES, armGeometry } from '../sim/mjcf';
+import { ARM_ANGLES, HEAD, antiSwingDirection, antiSwingProfile, armGeometry } from '../sim/mjcf';
 import { PRIZE_KINDS, type PrizeCounts, type PrizeKind } from '../sim/prizes';
 import { torqueAtVoltage } from '../sim/solenoid';
 import type { DebugInfo } from '../worker/protocol';
@@ -248,9 +250,23 @@ export class OperatorPanel {
           this.tableInputs.set(d.code, sel);
           cell.append(sel);
         } else if (d.kind === 'action') {
+          // Two-step confirm in the page itself (browser dialogs are not available everywhere).
           const btn = el('button', {}, '執行');
+          let armed = 0;
           btn.addEventListener('click', () => {
-            if (confirm(`確定執行「${d.label}」？`)) this.runAction(d.code);
+            if (armed) {
+              window.clearTimeout(armed);
+              armed = 0;
+              btn.textContent = '已執行';
+              this.runAction(d.code);
+              window.setTimeout(() => (btn.textContent = '執行'), 1500);
+              return;
+            }
+            btn.textContent = '再按一次確認';
+            armed = window.setTimeout(() => {
+              armed = 0;
+              btn.textContent = '執行';
+            }, 3000);
           });
           cell.append(btn);
         } else {
@@ -274,7 +290,7 @@ export class OperatorPanel {
       el(
         'p',
         { class: 'note' },
-        '機構上的實體調整（不在中控選單內）：換爪子大小、拗爪距、換爪套、彎防甩片。改變幾何會重建物理模型，獎品位置保持不變；爪套摩擦即時生效。',
+        '機構上的實體調整（不在中控選單內）：換爪子大小、拗爪距、換爪套、彎天車下方的防甩片。改變幾何會重建物理模型，獎品位置保持不變；爪套摩擦即時生效。',
       ),
     );
     const preview = el('div', { class: 'preview' });
@@ -321,8 +337,8 @@ export class OperatorPanel {
     });
     p.append(field('爪套材質', sleeve), muField);
 
-    p.append(el('h3', {}, '爪距與防甩片'));
-    const linkBox = el('input', { type: 'checkbox' });
+    p.append(el('h3', {}, '爪距'));
+    const linkBox = el('input', { type: 'checkbox', id: 'claw-linked' });
     linkBox.checked = this.linked;
     const linkLabel = el('label', {}, '');
     linkLabel.append(linkBox, ' 三爪連動（取消可個別調整每支爪）');
@@ -337,22 +353,16 @@ export class OperatorPanel {
       for (const i of arms) {
         const card = el('div', { class: 'arm-card' });
         card.append(el('h4', {}, this.linked ? '三支爪' : `第 ${i + 1} 爪（${['後', '左前', '右前'][i]}）`));
-        const slider = (label: string, key: 'spreadCm' | 'finConcavityDeg' | 'finDirectionDeg', min: number, max: number, step: number, unit: string) => {
-          const input = el('input', { type: 'range', min: String(min), max: String(max), step: String(step) });
-          input.value = String(c.arms[i][key]);
-          const out = el('output', {}, `${c.arms[i][key]}${unit}`);
-          input.addEventListener('input', () => {
-            out.textContent = `${input.value}${unit}`;
-            const targets = this.linked ? [0, 1, 2] : [i];
-            targets.forEach((t) => (c.arms[t][key] = Number(input.value)));
-            drawPreview();
-          });
-          input.addEventListener('change', () => this.applyClaw(true));
-          card.append(field(label, input, out));
-        };
-        slider('爪距（開度）', 'spreadCm', lo, hi, 0.5, ' cm');
-        slider('防甩片凹度', 'finConcavityDeg', 0, 45, 1, '°');
-        slider('防甩片方向', 'finDirectionDeg', -30, 30, 1, '°');
+        const input = el('input', { type: 'range', min: String(lo), max: String(hi), step: '0.5', id: `claw-spread-${i}` });
+        input.value = String(c.arms[i].spreadCm);
+        const out = el('output', {}, `${c.arms[i].spreadCm} cm`);
+        input.addEventListener('input', () => {
+          out.textContent = `${input.value} cm`;
+          (this.linked ? [0, 1, 2] : [i]).forEach((t) => (c.arms[t].spreadCm = Number(input.value)));
+          drawPreview();
+        });
+        input.addEventListener('change', () => this.applyClaw(true));
+        card.append(field('爪距（開度）', input, out));
         armsWrap.append(card);
       }
     };
@@ -366,57 +376,87 @@ export class OperatorPanel {
       renderArms();
     });
 
+    p.append(el('h3', {}, '防甩片（天車下方）'));
+    p.append(
+      el(
+        'p',
+        { class: 'note' },
+        '裝在天車下方、整個爪子上方的彎曲金屬片。爪子收回到頂時會撞到它：凹度越大，撞擊時把爪子往旁邊推得越用力，夾著的東西丟得越遠；凹的方向決定東西往哪邊丟。凹度 0＝平板，只會上下頓一下。',
+      ),
+    );
+    const dirName = (deg: number) => ['前', '右前', '右', '右後', '後', '左後', '左', '左前'][Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+    const conc = el('input', { type: 'range', min: '0', max: '45', step: '1', id: 'antiswing-concavity' });
+    conc.value = String(c.antiSwing.concavityDeg);
+    const concOut = el('output', {}, `${c.antiSwing.concavityDeg}°`);
+    conc.addEventListener('input', () => {
+      c.antiSwing.concavityDeg = Number(conc.value);
+      concOut.textContent = `${conc.value}°`;
+      drawPreview();
+    });
+    conc.addEventListener('change', () => this.applyClaw(true));
+    const dir = el('input', { type: 'range', min: '0', max: '355', step: '5', id: 'antiswing-direction' });
+    dir.value = String(c.antiSwing.directionDeg);
+    const dirOut = el('output', {}, `${c.antiSwing.directionDeg}° ${dirName(c.antiSwing.directionDeg)}`);
+    dir.addEventListener('input', () => {
+      c.antiSwing.directionDeg = Number(dir.value);
+      dirOut.textContent = `${dir.value}° ${dirName(Number(dir.value))}`;
+      drawPreview();
+    });
+    dir.addEventListener('change', () => this.applyClaw(true));
+    p.append(field('凹度', conc, concOut), field('丟出方向', dir, dirOut));
+    p.append(el('p', { class: 'note' }, '方向：0° 往前（玩家／出貨口那一側），90° 往右，180° 往後，270° 往左。出貨口在左前方，約 315°。'));
+
     const drawPreview = () => {
       const s = SIZE_SCALE[c.size];
       const sc = 850;
-      // Top view: tip circle and fin directions.
-      let top = `<svg width="200" height="200" viewBox="-100 -100 200 200"><circle r="${(spreadRange(c.size)[1] / 200) * sc}" fill="none" stroke="#3a2f55" stroke-dasharray="3 4"/><circle r="${0.022 * s * sc}" fill="#e0338c"/>`;
+      const [dx, dy] = antiSwingDirection(c.antiSwing.directionDeg);
+      const profile = antiSwingProfile(c.antiSwing.concavityDeg);
+      // Top view (back of the cabinet up): arms, plate outline and throw arrow.
+      let top = `<svg width="200" height="200" viewBox="-100 -100 200 200"><circle r="${(spreadRange(c.size)[1] / 200) * sc}" fill="none" stroke="#3a2f55" stroke-dasharray="3 4"/>`;
       c.arms.forEach((a, i) => {
         const g = armGeometry(s, a.spreadCm);
         const r = (a.spreadCm / 200) * sc;
         const ang = ARM_ANGLES[i];
-        const x = Math.cos(ang) * r;
-        const y = -Math.sin(ang) * r;
-        const hx = Math.cos(ang) * g.hingeR * sc;
-        const hy = -Math.sin(ang) * g.hingeR * sc;
-        const fd = ang + Math.PI + (a.finDirectionDeg * Math.PI) / 180;
-        const fl = 0.0165 * s * sc * Math.cos((a.finConcavityDeg * Math.PI) / 360);
-        top += `<line x1="${hx}" y1="${hy}" x2="${x}" y2="${y}" stroke="#e8e8ee" stroke-width="5" stroke-linecap="round"/>`;
-        top += `<line x1="${x}" y1="${y}" x2="${x + Math.cos(fd) * fl}" y2="${y - Math.sin(fd) * fl}" stroke="#7fd3ff" stroke-width="6" stroke-linecap="round"/>`;
-        top += `<circle cx="${x}" cy="${y}" r="5" fill="#111"/>`;
+        top += `<line x1="${Math.cos(ang) * g.hingeR * sc}" y1="${-Math.sin(ang) * g.hingeR * sc}" x2="${Math.cos(ang) * r}" y2="${-Math.sin(ang) * r}" stroke="#e8e8ee" stroke-width="5" stroke-linecap="round"/>`;
+        top += `<circle cx="${Math.cos(ang) * r}" cy="${-Math.sin(ang) * r}" r="5" fill="#111"/>`;
       });
-      top += `<text x="0" y="94" fill="#b9acd3" font-size="12" text-anchor="middle">俯視（藍＝防甩片）</text></svg>`;
-      // Side view of arm 0 open, with the fin curve.
-      const a0 = c.arms[0];
-      const g = armGeometry(s, a0.spreadCm);
-      const q = g.openAngle;
-      const rot = ([x, z]: number[]) => [x * Math.cos(q) - z * Math.sin(q), x * Math.sin(q) + z * Math.cos(q)];
-      const pts = [[0, 0], g.elbow, g.tip].map(rot).map(([x, z]) => [g.hingeR + x, z]);
-      let side = `<svg width="200" height="200" viewBox="-40 -30 200 200"><rect x="${-0.03 * s * sc}" y="${-0.035 * s * sc}" width="${0.06 * s * sc}" height="${0.07 * s * sc}" fill="#e0338c" transform="translate(0,${0.035 * s * sc - 20})"/>`;
-      const P = (pt: number[]) => `${pt[0] * sc},${-pt[1] * sc}`;
-      side += `<polyline points="${pts.map(P).join(' ')}" fill="none" stroke="#ddd" stroke-width="5"/>`;
-      let fx = pts[2][0];
-      let fz = pts[2][1];
-      let finPath = `M${fx * sc},${-fz * sc}`;
-      for (let k = 0; k < 3; k++) {
-        const ang = ((a0.finConcavityDeg * Math.PI) / 180) * ((k + 1) / 3);
-        fx += -Math.cos(ang) * 0.0055 * s;
-        fz += Math.sin(ang) * 0.0055 * s;
-        finPath += ` L${fx * sc},${-fz * sc}`;
-      }
-      side += `<path d="${finPath}" stroke="#7fd3ff" stroke-width="5" fill="none" stroke-linecap="round"/>`;
-      side += `<text x="60" y="164" fill="#b9acd3" font-size="12" text-anchor="middle">側視（張開）</text></svg>`;
+      top += `<circle r="${HEAD.radius * s * sc}" fill="#e0338c"/>`;
+      const u0 = profile[0].u - profile[0].len / 2;
+      const u1 = profile[profile.length - 1].u + profile[profile.length - 1].len / 2;
+      const deg = (Math.atan2(-dy, dx) * 180) / Math.PI;
+      top += `<g transform="rotate(${deg})"><rect x="${u0 * sc}" y="${-0.032 * sc}" width="${(u1 - u0) * sc}" height="${0.064 * sc}" fill="#7fd3ff" fill-opacity="0.35" stroke="#7fd3ff"/>`;
+      top += `<line x1="0" y1="0" x2="80" y2="0" stroke="#ffcf1a" stroke-width="4"/><path d="M80,-8 L96,0 L80,8 Z" fill="#ffcf1a"/></g>`;
+      top += `<text x="0" y="-88" fill="#b9acd3" font-size="11" text-anchor="middle">後</text><text x="0" y="96" fill="#b9acd3" font-size="11" text-anchor="middle">前（玩家）</text></svg>`;
+      // Side section along the throw direction: gantry, the plate right under it, and the claw at the top.
+      let side = `<svg width="200" height="200" viewBox="-110 -70 220 220">`;
+      side += `<rect x="-51" y="-51" width="102" height="51" fill="#ffcf1a"/>`;
+      const plate = profile
+        .map((seg, k) => {
+          const x0 = seg.u - (Math.cos(seg.angle) * seg.len) / 2;
+          const z0 = seg.z - (Math.sin(seg.angle) * seg.len) / 2;
+          const x1 = seg.u + (Math.cos(seg.angle) * seg.len) / 2;
+          const z1 = seg.z + (Math.sin(seg.angle) * seg.len) / 2;
+          return `${k === 0 ? 'M' : 'L'}${x0 * sc},${-z0 * sc} L${x1 * sc},${-z1 * sc}`;
+        })
+        .join(' ');
+      side += `<path d="${plate}" stroke="#7fd3ff" stroke-width="4" fill="none" stroke-linejoin="round"/>`;
+      const capTop = CABINET.pulleyZ - CABINET.ropeTop;
+      const headC = capTop - HEAD.ropeOffset * s;
+      side += `<line x1="0" y1="${17}" x2="0" y2="${-capTop * sc}" stroke="#888" stroke-width="2"/>`;
+      side += `<rect x="${-HEAD.radius * s * sc}" y="${-(headC + HEAD.halfHeight * s) * sc}" width="${2 * HEAD.radius * s * sc}" height="${2 * HEAD.halfHeight * s * sc}" fill="#e0338c"/>`;
+      side += `<line x1="20" y1="${-(headC - 0.02) * sc}" x2="80" y2="${-(headC - 0.02) * sc}" stroke="#ffcf1a" stroke-width="4"/><path d="M80,${-(headC - 0.02) * sc - 8} L96,${-(headC - 0.02) * sc} L80,${-(headC - 0.02) * sc + 8} Z" fill="#ffcf1a"/>`;
+      side += `<text x="0" y="140" fill="#b9acd3" font-size="11" text-anchor="middle">側視：爪子到頂撞防甩片 → 往箭頭方向丟</text></svg>`;
       preview.innerHTML = top + side;
-      const lever = g.lever;
-      const force = torqueAtVoltage(48) / lever;
-      info.innerHTML = `爪臂長 ${(lever * 100).toFixed(1)} cm · 48V 時單爪尖夾力約 ${force.toFixed(2)} N · 爪套 ${sleeveSpec(c).label} · 爪頭重 ${(0.3 * s ** 3 * 1000).toFixed(0)} g`;
+      const g = armGeometry(s, c.arms[0].spreadCm);
+      const force = torqueAtVoltage(48) / g.lever;
+      info.innerHTML = `爪臂長 ${(g.lever * 100).toFixed(1)} cm · 48V 時單爪尖夾力約 ${force.toFixed(2)} N · 爪套 ${sleeveSpec(c).label} · 爪頭重 ${(0.3 * s ** 3 * 1000).toFixed(0)} g · 防甩片 ${c.antiSwing.concavityDeg}° 往${dirName(c.antiSwing.directionDeg)}丟`;
     };
     renderArms();
     drawPreview();
     const reset = el('button', {}, '恢復標準 JS 爪');
     reset.addEventListener('click', () => {
-      Object.assign(c, { size: 'medium', sleeve: 'rubber', customFriction: 0.8 });
-      c.arms.forEach((a) => Object.assign(a, { spreadCm: 12, finConcavityDeg: 10, finDirectionDeg: 0 }));
+      Object.assign(c, { size: 'medium', sleeve: 'rubber', customFriction: 0.8, antiSwing: defaultAntiSwing() });
+      c.arms.forEach((a) => (a.spreadCm = DEFAULT_SPREAD_CM));
       this.applyClaw(true);
       this.buildClaw();
     });

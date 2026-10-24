@@ -1,6 +1,6 @@
 import { CABINET, overHole } from './cabinet';
 import { type ClawTuning, cloneClawTuning, sleeveSpec } from './clawConfig';
-import { ARM_COUNT, armGeometry, buildMjcf } from './mjcf';
+import { ARM_COUNT, HEAD, armGeometry, buildMjcf } from './mjcf';
 import { getMujoco, type Mujoco } from './mujoco';
 import { PRIZE_KINDS, type PrizePlacement } from './prizes';
 import { Solenoid } from './solenoid';
@@ -174,7 +174,7 @@ export class ClawSimulation {
     const a = this.ids.headQ;
     q[a] = x;
     q[a + 1] = y;
-    q[a + 2] = CABINET.gantryZ - 0.02 - this.ropeLen - 0.044 * s;
+    q[a + 2] = CABINET.gantryZ + CABINET.pulleyZ - this.ropeLen - HEAD.ropeOffset * s;
     q[a + 3] = 1;
     q[a + 4] = 0;
     q[a + 5] = 0;
@@ -280,12 +280,9 @@ export class ClawSimulation {
   setClawTuning(t: ClawTuning): void {
     const geomChanged =
       t.size !== this.claw.size ||
-      t.arms.some(
-        (a, i) =>
-          a.spreadCm !== this.claw.arms[i].spreadCm ||
-          a.finConcavityDeg !== this.claw.arms[i].finConcavityDeg ||
-          a.finDirectionDeg !== this.claw.arms[i].finDirectionDeg,
-      );
+      t.antiSwing.concavityDeg !== this.claw.antiSwing.concavityDeg ||
+      t.antiSwing.directionDeg !== this.claw.antiSwing.directionDeg ||
+      t.arms.some((a, i) => a.spreadCm !== this.claw.arms[i].spreadCm);
     this.claw = cloneClawTuning(t);
     if (!geomChanged) {
       this.applySleeve();
@@ -432,7 +429,7 @@ export class ClawSimulation {
     const v = this.headVel();
     const dv = Math.hypot(v[0] - this.prevHeadVel[0], v[1] - this.prevHeadVel[1], v[2] - this.prevHeadVel[2]);
     this.prevHeadVel = v;
-    // A sudden velocity change of the hanging claw = it hit glass, the tube or a prize.
+    // A sudden velocity change of the hanging claw = it hit glass, the anti-swing plate or a prize.
     if (dv > 0.25 && this.knockCooldown === 0) {
       this.knockCooldown = 0.08;
       this.events.onKnock?.(Math.min(1, dv / 1.5));

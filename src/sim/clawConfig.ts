@@ -9,10 +9,18 @@ export type SleeveMaterial = 'metal' | 'plastic' | 'rubber' | 'silicone' | 'cust
 export interface ArmTuning {
   /** Tip spread when fully open, measured tip-to-axis × 2 (cm). */
   spreadCm: number;
-  /** Anti-swing fin (防甩片) cup bend, degrees. 0 = flat. */
-  finConcavityDeg: number;
-  /** Anti-swing fin yaw about the arm tip, degrees. + = clockwise seen from above. */
-  finDirectionDeg: number;
+}
+
+/**
+ * Anti-swing plate (防甩片): a bent metal sheet under the gantry, above the whole claw.
+ * The claw hits it when it is reeled back up; the bend kicks the claw sideways and
+ * flings what it holds.
+ */
+export interface AntiSwingTuning {
+  /** Bend of the plate, degrees. 0 = flat (only a vertical jolt); more = throws further. */
+  concavityDeg: number;
+  /** Direction the prize gets thrown, degrees clockwise seen from above; 0 = towards the player (front). */
+  directionDeg: number;
 }
 
 export interface ClawTuning {
@@ -22,6 +30,7 @@ export interface ClawTuning {
   customFriction: number;
   /** Per-arm tuning, three arms at 0°, 120°, 240° (arm 0 points to the back of the cabinet). */
   arms: [ArmTuning, ArmTuning, ArmTuning];
+  antiSwing: AntiSwingTuning;
 }
 
 export interface SleeveSpec {
@@ -53,14 +62,21 @@ export const SIZE_LABEL: Record<ClawSize, string> = { small: '小爪', medium: '
 /** Allowed spread range for a given claw size (cm). */
 export function spreadRange(size: ClawSize): [number, number] {
   const s = SIZE_SCALE[size];
-  return [Math.round(7 * s * 10) / 10, Math.round(16 * s * 10) / 10];
+  return [Math.round(9 * s * 10) / 10, Math.round(22 * s * 10) / 10];
 }
 
+/** Default open tip spread: wide, so the claw readily gets around a prize. */
+export const DEFAULT_SPREAD_CM = 16;
+
 export function defaultClawTuning(): ClawTuning {
-  const arm = (): ArmTuning => ({ spreadCm: 12, finConcavityDeg: 10, finDirectionDeg: 0 });
-  return { size: 'medium', sleeve: 'rubber', customFriction: 0.8, arms: [arm(), arm(), arm()] };
+  const arm = (): ArmTuning => ({ spreadCm: DEFAULT_SPREAD_CM });
+  return { size: 'medium', sleeve: 'rubber', customFriction: 0.8, arms: [arm(), arm(), arm()], antiSwing: defaultAntiSwing() };
+}
+
+export function defaultAntiSwing(): AntiSwingTuning {
+  return { concavityDeg: 15, directionDeg: 0 };
 }
 
 export function cloneClawTuning(t: ClawTuning): ClawTuning {
-  return { ...t, arms: t.arms.map((a) => ({ ...a })) as ClawTuning['arms'] };
+  return { ...t, arms: t.arms.map((a) => ({ ...a })) as ClawTuning['arms'], antiSwing: { ...t.antiSwing } };
 }

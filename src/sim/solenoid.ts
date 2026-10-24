@@ -14,7 +14,7 @@ export const COIL_R = 16; // Ω
 export const COIL_TAU = 0.03; // s (L/R)
 export const I_SAT = 2.6; // A, iron saturation knee
 /** Per-arm closing torque at 48 V with the claw fully closed (N·m). */
-export const TORQUE_48V = 0.42;
+export const TORQUE_48V = 0.3;
 
 const I48 = Math.min(48 / COIL_R, I_SAT * 1.15);
 

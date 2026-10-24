@@ -4,7 +4,7 @@ import { PRIZE_KINDS, type PrizePlacement } from './prizes';
 
 /**
  * Builds the MuJoCo MJCF model of the whole machine. Geometry that depends on the
- * mechanical claw tuning (size, spread, anti-swing fins) is baked into the XML, so
+ * mechanical claw tuning (size, spread, anti-swing plate) is baked into the XML, so
  * changing those means regenerating the model; voltages, speeds and friction are
  * changed at runtime on the compiled model.
  */
@@ -13,13 +13,43 @@ export const ARM_COUNT = 3;
 /** Arm 0 points to the back (+y); the others follow counter-clockwise. */
 export const ARM_ANGLES = [90, 210, 330].map((d) => (d * Math.PI) / 180);
 
+/** JS claw head dimensions at scale 1 (metres): slim coil housing, plunger rod and hub. */
+export const HEAD = {
+  radius: 0.025,
+  /** A short coil section, about 3 cm tall. */
+  halfHeight: 0.016,
+  /** Cable attachment above the head centre (top of the cap). */
+  ropeOffset: 0.023,
+  /** Hub carrying the arm pivots, below the housing. */
+  hubZ: -0.04,
+  hingeR: 0.015,
+};
+
+/**
+ * Arm shape from photos of a real JS claw, open as it hangs (x radial outward, z up, hinge
+ * at the origin): one continuous bent rod — out from the hub, a smooth curve down, then
+ * almost straight down with the tip turned in only slightly. No extra hook at the end.
+ */
+const ARM_SHAPE: Array<[number, number]> = [
+  [0, 0],
+  [0.022, -0.006],
+  [0.04, -0.02],
+  [0.05, -0.042],
+  [0.053, -0.07],
+  [0.05, -0.1],
+  [0.044, -0.125],
+];
+/** Tip distance from the claw axis when fully closed: the three tips nearly touch. */
+const CLOSED_TIP_RADIUS = 0.009;
+
 /** Geometry of one claw arm in its local frame (x radial outward, z up), metres. */
 export interface ArmGeometry {
   scale: number;
   /** Hinge offset from the head axis. */
   hingeR: number;
   hingeZ: number;
-  elbow: [number, number];
+  /** Rod centre line in the closed pose (hinge angle 0), hinge first, tip last. */
+  points: Array<[number, number]>;
   tip: [number, number];
   /** Hinge angle (rad) at full open. */
   openAngle: number;
@@ -27,29 +57,33 @@ export interface ArmGeometry {
   lever: number;
 }
 
-export function armGeometry(scale: number, spreadCm: number): ArmGeometry {
-  const hingeR = 0.03 * scale;
-  const elbow: [number, number] = [0.03 * scale, -0.065 * scale];
-  const tip: [number, number] = [-0.006 * scale, -0.125 * scale];
-  const target = spreadCm / 200;
-  // Opening rotates the arm outward about the tangential axis: x' = x cos q − z sin q.
-  const tipRadius = (q: number) => hingeR + tip[0] * Math.cos(q) - tip[1] * Math.sin(q);
-  let lo = 0;
-  let hi = 1.4;
-  for (let i = 0; i < 50; i++) {
+/** Rotates arm points about the hinge; + swings the tip outward (opens). */
+export function rotateArm(points: Array<[number, number]>, q: number): Array<[number, number]> {
+  const c = Math.cos(q);
+  const sn = Math.sin(q);
+  return points.map(([x, z]) => [x * c - z * sn, x * sn + z * c]);
+}
+
+function solveAngle(radius: (q: number) => number, target: number, lo: number, hi: number): number {
+  // radius() grows with q over the search range.
+  for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (tipRadius(mid) < target) lo = mid;
+    if (radius(mid) < target) lo = mid;
     else hi = mid;
   }
-  return {
-    scale,
-    hingeR,
-    hingeZ: -0.035 * scale,
-    elbow,
-    tip,
-    openAngle: (lo + hi) / 2,
-    lever: Math.hypot(tip[0], tip[1]),
-  };
+  return (lo + hi) / 2;
+}
+
+export function armGeometry(scale: number, spreadCm: number): ArmGeometry {
+  const hingeR = HEAD.hingeR * scale;
+  const shape = ARM_SHAPE.map(([x, z]) => [x * scale, z * scale] as [number, number]);
+  const tipRadius = (pts: Array<[number, number]>, q: number) => hingeR + rotateArm([pts[pts.length - 1]], q)[0][0];
+  // Closed pose: swing the photographed shape inward until the tips nearly meet.
+  const close = solveAngle((q) => tipRadius(shape, q), CLOSED_TIP_RADIUS * scale, -1.2, 0);
+  const points = rotateArm(shape, close);
+  const openAngle = solveAngle((q) => tipRadius(points, q), spreadCm / 200, 0, 1.6);
+  const tip = points[points.length - 1];
+  return { scale, hingeR, hingeZ: HEAD.hubZ * scale, points, tip, openAngle, lever: Math.hypot(tip[0], tip[1]) };
 }
 
 const f = (n: number) => (Math.abs(n) < 1e-9 ? '0' : n.toFixed(5).replace(/0+$/, '').replace(/\.$/, ''));
@@ -72,62 +106,115 @@ function clawXml(t: ClawTuning): string {
   const sleeve = sleeveSpec(t);
   const headMass = 0.3 * s ** 3;
   const armMass = 0.028 * s ** 3;
+  const metal = 'friction="0.3 0.003 0.0001"';
+  const black = 'rgba="0.1 0.1 0.11 1"';
+  const gold = 'rgba="0.93 0.68 0.12 1"';
   const out: string[] = [];
-  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ - 0.02 - CABINET.ropeTop - 0.044 * s)}">`);
+  out.push(`<body name="claw_head" pos="${v(CABINET.home.x, CABINET.home.y, CABINET.gantryZ + CABINET.pulleyZ - CABINET.ropeTop - HEAD.ropeOffset * s)}">`);
   out.push(`<joint name="claw_free" type="free" damping="0.1"/>`);
-  out.push(`<geom name="claw_housing" priority="1" type="cylinder" size="${v(0.03 * s, 0.035 * s)}" mass="${f(headMass * 0.8)}" rgba="0.85 0.2 0.55 1" contype="3" conaffinity="3" friction="0.3 0.003 0.0001"/>`);
-  out.push(`<geom name="claw_cap" priority="1" type="cylinder" pos="${v(0, 0, 0.038 * s)}" size="${v(0.014 * s, 0.006 * s)}" mass="${f(headMass * 0.1)}" rgba="0.75 0.75 0.78 1" contype="3" conaffinity="3"/>`);
-  out.push(`<geom name="claw_ring" priority="1" type="cylinder" pos="${v(0, 0, -0.03 * s)}" size="${v(0.036 * s, 0.006 * s)}" mass="${f(headMass * 0.1)}" rgba="0.6 0.6 0.65 1" contype="1" conaffinity="1"/>`);
-  out.push(`<site name="rope_bot" pos="${v(0, 0, 0.044 * s)}" size="0.003"/>`);
+  // Short coil housing with its clamp ring, the cap the cable is tied to, the plunger rod and the hub.
+  out.push(`<geom name="claw_housing" priority="1" type="cylinder" size="${v(HEAD.radius * s, HEAD.halfHeight * s)}" mass="${f(headMass * 0.72)}" ${black} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_ring" priority="1" type="cylinder" size="${v((HEAD.radius + 0.003) * s, 0.005 * s)}" mass="${f(headMass * 0.08)}" ${gold} contype="3" conaffinity="3" ${metal}/>`);
+  out.push(`<geom name="claw_cap" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.halfHeight + 0.0035) * s)}" size="${v(0.014 * s, 0.0035 * s)}" mass="${f(headMass * 0.04)}" ${black} contype="3" conaffinity="3"/>`);
+  out.push(`<geom name="claw_rod" priority="1" type="cylinder" pos="${v(0, 0, (HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" size="${v(0.005 * s, (-HEAD.hubZ - HEAD.halfHeight) * 0.5 * s)}" mass="${f(headMass * 0.04)}" rgba="0.8 0.8 0.84 1" ${metal}/>`);
+  out.push(`<geom name="claw_hub" priority="1" type="box" pos="${v(0, 0, HEAD.hubZ * s)}" size="${v(0.016 * s, 0.016 * s, 0.007 * s)}" mass="${f(headMass * 0.12)}" ${gold} ${metal}/>`);
+  out.push(`<site name="rope_bot" pos="${v(0, 0, HEAD.ropeOffset * s)}" size="0.003"/>`);
 
   for (let i = 0; i < ARM_COUNT; i++) {
-    const a = t.arms[i];
-    const g = armGeometry(s, a.spreadCm);
+    const g = armGeometry(s, t.arms[i].spreadCm);
     const phi = ARM_ANGLES[i];
-    const [ex, ez] = g.elbow;
+    const pts = g.points;
+    const lengths = pts.slice(1).map((p, k) => Math.hypot(p[0] - pts[k][0], p[1] - pts[k][1]));
+    const total = lengths.reduce((x, y) => x + y, 0);
     const [tx, tz] = g.tip;
-    const sl = 0.55;
-    const sx = ex + (tx - ex) * sl;
-    const sz = ez + (tz - ez) * sl;
     out.push(`<body name="arm${i}" pos="${v(g.hingeR * Math.cos(phi), g.hingeR * Math.sin(phi), g.hingeZ)}" euler="0 0 ${f(phi)}">`);
     out.push(
       `<joint name="arm${i}_hinge" type="hinge" axis="0 -1 0" range="${v(-0.02, g.openAngle)}" limited="true" ` +
         `stiffness="${f(ARM_SPRING)}" springref="${f(g.openAngle + ARM_SPRING_PRELOAD)}" damping="0.0015" armature="0.00005"/>`,
     );
-    out.push(`<geom name="arm${i}_upper" priority="1" type="capsule" fromto="${v(0, 0, 0, ex, 0, ez)}" size="${f(0.0045 * s)}" mass="${f(armMass * 0.45)}" rgba="0.82 0.82 0.86 1" friction="0.3 0.003 0.0001"/>`);
-    out.push(`<geom name="arm${i}_lower" priority="1" type="capsule" fromto="${v(ex, 0, ez, sx, 0, sz)}" size="${f(0.004 * s)}" mass="${f(armMass * 0.25)}" rgba="0.82 0.82 0.86 1" friction="0.3 0.003 0.0001"/>`);
-    out.push(
-      `<geom name="arm${i}_sleeve" priority="1" type="capsule" fromto="${v(sx, 0, sz, tx, 0, tz)}" size="${f(0.0062 * s)}" mass="${f(armMass * 0.15)}" ` +
-        `rgba="0.15 0.15 0.15 1" condim="6" friction="${v(...sleeve.friction)}" solref="${v(sleeve.solrefTime, 1)}"/>`,
-    );
-    // Anti-swing fin (防甩片): a curved metal tab at the tip, cupped upward by `finConcavityDeg`
-    // and yawed about the arm by `finDirectionDeg`.
-    const segs = 3;
-    const segLen = 0.0055 * s;
-    const halfW = 0.0075 * s;
-    const conc = (a.finConcavityDeg * Math.PI) / 180;
-    let px = 0;
-    let pz = 0;
-    out.push(`<frame pos="${v(tx, 0, tz)}" euler="${v(0, 0, (a.finDirectionDeg * Math.PI) / 180)}">`);
-    for (let k = 0; k < segs; k++) {
-      const ang = (conc * (k + 1)) / segs;
-      const dx = -Math.cos(ang);
-      const dz = Math.sin(ang);
-      const cx = px + (dx * segLen) / 2;
-      const cz = pz + (dz * segLen) / 2;
-      out.push(
-        `<geom name="arm${i}_fin${k}" priority="1" type="box" pos="${v(cx, 0, cz)}" euler="${v(0, ang, 0)}" size="${v(segLen / 2, halfW, 0.0012 * s)}" ` +
-          `mass="${f((armMass * 0.15) / segs)}" rgba="0.9 0.9 0.94 1" friction="0.3 0.003 0.0001"/>`,
-      );
-      px += dx * segLen;
-      pz += dz * segLen;
+    // The rod as a chain of capsules along the curve; the last one wears the rubber sleeve.
+    const last = pts.length - 2;
+    for (let k = 0; k <= last; k++) {
+      const [x0, z0] = pts[k];
+      const [x1, z1] = pts[k + 1];
+      const mass = f((armMass * lengths[k]) / total);
+      if (k < last) {
+        out.push(`<geom name="arm${i}_seg${k}" priority="1" type="capsule" fromto="${v(x0, 0, z0, x1, 0, z1)}" size="${f(0.0042 * s)}" mass="${mass}" ${black} ${metal}/>`);
+      } else {
+        out.push(
+          `<geom name="arm${i}_sleeve" priority="1" type="capsule" fromto="${v(x0, 0, z0, x1, 0, z1)}" size="${f(0.0062 * s)}" mass="${mass}" ` +
+            `rgba="0.15 0.15 0.15 1" condim="6" friction="${v(...sleeve.friction)}" solref="${v(sleeve.solrefTime, 1)}"/>`,
+        );
+      }
     }
-    out.push(`</frame>`);
     out.push(`<site name="arm${i}_tip" pos="${v(tx, 0, tz)}" size="0.002"/>`);
     out.push(`</body>`);
   }
   out.push(`</body>`);
   return out.join('\n');
+}
+
+/**
+ * Height (gantry frame) where the claw cap meets the anti-swing plate, just as it reaches the
+ * top. The plate hangs directly under the carriage, nothing in between.
+ */
+export const ANTISWING_CONTACT_Z = CABINET.pulleyZ - CABINET.ropeTop + 0.002;
+const ANTISWING_SEGMENTS = 8;
+const ANTISWING_LENGTH = 0.1;
+const ANTISWING_HALF_WIDTH = 0.032;
+/** Where along the plate (fraction from its centre) the cable passes and the claw hits. */
+const ANTISWING_HIT = -0.35;
+
+/** Throw direction as a unit vector: 0° = front (towards the player), 90° = right. */
+export function antiSwingDirection(directionDeg: number): [number, number] {
+  const a = (directionDeg * Math.PI) / 180;
+  return [Math.sin(a), -Math.cos(a)];
+}
+
+/**
+ * Profile of the anti-swing plate in its own (u, z) plane, u along the throw direction:
+ * a dome (concave side facing the claw) bent by `concavityDeg` end to end, shifted so the
+ * point above the cable sits at ANTISWING_CONTACT_Z. There its underside slopes up
+ * towards +u, so a claw rising into it is pushed towards +u, the throw direction.
+ */
+export function antiSwingProfile(concavityDeg: number): Array<{ u: number; z: number; angle: number; len: number }> {
+  const theta = (concavityDeg * Math.PI) / 180;
+  const n = ANTISWING_SEGMENTS;
+  const len = ANTISWING_LENGTH / n;
+  const pts: Array<[number, number]> = [[0, 0]];
+  const angles: number[] = [];
+  for (let k = 0; k < n; k++) {
+    // Tangent angle runs from +θ/2 to −θ/2 across the plate (rises, crests, falls).
+    const ang = theta * (0.5 - (k + 0.5) / n);
+    angles.push(ang);
+    const [pu, pz] = pts[pts.length - 1];
+    pts.push([pu + Math.cos(ang) * len, pz + Math.sin(ang) * len]);
+  }
+  // Point on the plate at the hit fraction; shift it onto the cable axis at the contact height.
+  const hitIndex = ((ANTISWING_HIT + 0.5) * n);
+  const k0 = Math.floor(hitIndex);
+  const fr = hitIndex - k0;
+  const hu = pts[k0][0] + (pts[k0 + 1][0] - pts[k0][0]) * fr;
+  const hz = pts[k0][1] + (pts[k0 + 1][1] - pts[k0][1]) * fr;
+  return angles.map((angle, k) => ({
+    u: (pts[k][0] + pts[k + 1][0]) / 2 - hu,
+    z: (pts[k][1] + pts[k + 1][1]) / 2 - hz + ANTISWING_CONTACT_Z,
+    angle,
+    len,
+  }));
+}
+
+function antiSwingXml(t: ClawTuning): string {
+  const [dx, dy] = antiSwingDirection(t.antiSwing.directionDeg);
+  const yaw = Math.atan2(dy, dx);
+  const thick = 0.0015;
+  const geoms = antiSwingProfile(t.antiSwing.concavityDeg).map(
+    (seg, k) =>
+      // The box's long axis follows the profile; its top face is the plate's underside + thickness.
+      `<geom name="antiswing_${k}" priority="1" type="box" pos="${v(seg.u, 0, seg.z + thick)}" euler="${v(0, -seg.angle, 0)}" ` +
+      `size="${v(seg.len / 2 + 0.0005, ANTISWING_HALF_WIDTH, thick)}" mass="0.01" rgba="0.85 0.86 0.9 1" contype="3" conaffinity="3" friction="0.3 0.003 0.0001"/>`,
+  );
+  return `<frame euler="${v(0, 0, yaw)}">\n  ${geoms.join('\n  ')}\n  </frame>`;
 }
 
 function prizeXml(p: PrizePlacement, i: number): string {
@@ -235,7 +322,6 @@ export interface MjcfOptions {
 export function buildMjcf(opts: MjcfOptions): string {
   const { claw, prizes } = opts;
   const { travel, gantryZ } = CABINET;
-  const s = SIZE_SCALE[claw.size];
   return `<mujoco model="feiluoli-standard">
 <compiler angle="radian" autolimits="true"/>
 <option timestep="${f(opts.timestep ?? 0.002)}" integrator="implicitfast" cone="elliptic" impratio="4" iterations="60" ls_iterations="20" gravity="0 0 -9.81"/>
@@ -249,8 +335,9 @@ ${cabinetXml(opts.guardH ?? CABINET.guardH)}
   <joint name="gantry_x" type="slide" axis="1 0 0" range="${v(travel.x0, travel.x1)}" damping="4" armature="0.05"/>
   <joint name="gantry_y" type="slide" axis="0 1 0" range="${v(travel.y0, travel.y1)}" damping="4" armature="0.05"/>
   <geom name="gantry_carriage" type="box" pos="0 0 0.03" size="0.06 0.05 0.03" mass="2.2" rgba="0.95 0.8 0.15 1" contype="0" conaffinity="0"/>
-  <geom name="gantry_tube" type="cylinder" pos="${v(0, 0, -0.065)}" size="${v(0.022 * Math.max(1, s), 0.025)}" mass="0.05" rgba="0.95 0.8 0.15 1" contype="2" conaffinity="2"/>
-  <site name="pulley" pos="0 0 -0.02" size="0.004"/>
+  <site name="pulley" pos="${v(0, 0, CABINET.pulleyZ)}" size="0.004"/>
+  <!-- 防甩片: bent plate under the gantry the claw hits on the way up. -->
+  ${antiSwingXml(claw)}
 </body>
 ${clawXml(claw)}
 ${prizes.map(prizeXml).join('\n')}
