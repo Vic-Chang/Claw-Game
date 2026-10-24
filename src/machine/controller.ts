@@ -57,7 +57,7 @@ export interface Accounts {
 export const GANTRY_SPEED = 0.2; // m/s
 export const WINCH_SPEED = 0.32; // m/s
 /** A12 回停下降 lowers at this fixed speed, whatever E5 is set to. */
-export const HOME_LOWER_SPEED = 0.15; // m/s
+export const HOME_LOWER_SPEED = 0.1; // m/s
 /** One step of 中壓距離頂點 in metres of cable from the top. */
 export const B4_STEP = 0.018;
 
