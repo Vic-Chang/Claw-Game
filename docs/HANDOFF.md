@@ -5,7 +5,8 @@
 ## 目前狀態
 - **分支**：`ccr-ca7e14bc-sjrc21`（從先前 `claude/claw-machine-game-physics-lftkbq` 的進度接續）。尚未開 PR（使用者要求時再開）。
 - **測試網址**（Artifact，私人）：https://claude.ai/artifact/2gJB3MEdhskE36CRUWA2nD
-  - 內容到 Version 4，還沒包含檯面高度功能；要更新就重新建置並發布，步驟見 ARCHITECTURE「Artifact 發布」。
+  - 最新內容到 Version 8：包含檯面高度功能。程式改動後要重新建置並發布，步驟見 ARCHITECTURE「Artifact 發布」。
+  - 頁面 `<title>` 維持「飛絡力夾娃娃機」；`mujoco-*.wasm` 檔名沒變時不必重傳（沒列在 `files` 的檔案會保留）。
 - **測試**：40 項全部通過。
 
 ## 最近完成
