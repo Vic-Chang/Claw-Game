@@ -14,7 +14,7 @@ export interface GeomInfo {
 }
 
 export type ToWorker =
-  | { type: 'init'; settings: Settings; claw: ClawTuning; counts: PrizeCounts; seed: number; guardCm: number }
+  | { type: 'init'; settings: Settings; claw: ClawTuning; counts: PrizeCounts; seed: number; guardCm: number; bedCm: number }
   | { type: 'input'; joy: [number, number]; grabDown: boolean }
   | { type: 'grab' }
   | { type: 'coin' }
@@ -23,6 +23,7 @@ export type ToWorker =
   | { type: 'claw'; claw: ClawTuning }
   | { type: 'prizes'; counts: PrizeCounts; seed: number }
   | { type: 'guard'; heightCm: number }
+  | { type: 'bed'; heightCm: number }
   | { type: 'clearAccounts' }
   | { type: 'clearBank' }
   | { type: 'resetError' }

@@ -22,7 +22,9 @@
 4. 送出 frame → `MachineScene.updateFrame`，HUD 與面板同步更新。
 5. 設定變更：
    - 中控設定（A–G）只更新 `Board`。
-   - 爪子幾何、擋板高度、獎品擺放會重建 MJCF；`rebuild()` 會保留獎品位置。
+   - 爪子幾何、擋板高度、檯面高度、獎品擺放會重建 MJCF；`rebuild()` 會保留獎品位置（改檯面高度時，還在檯內的獎品跟著上下移動 `bedShift`）。
+   - 檯面高度 `bedH`（`CABINET.bedRange` 0～0.3 m）：地板變成從 −2 cm 到 `bedH` 的實心塊，擋板、出貨口上緣、電眼門檻、`liftedPrize` 都以 `bedH` 為基準；天車、玻璃、出貨滑道底不動。`layoutPrizes` 的 z 是相對檯面，由 `ClawSimulation.onBed` 轉成世界座標。
+   - 上限 30 cm 的依據：預設擺法下最高獎品頂端 0.425 m，爪尖到頂時 0.511 m，仍有 8.6 cm 間隙。
    - 爪套摩擦直接改執行中的模型（`geom_friction`），不重建。
 
 ## 物理模型要點

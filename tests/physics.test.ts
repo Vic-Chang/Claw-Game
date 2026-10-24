@@ -392,3 +392,55 @@ describe('出貨口擋板 (chute guard)', () => {
     sim.dispose();
   });
 });
+
+describe('檯面高度 (bed height)', () => {
+  /** Drops the empty claw at the centre and returns the head z where the cable goes slack. */
+  async function landingZ(bedH: number): Promise<number> {
+    const sim = await ClawSimulation.create(tuning(), [], CABINET.guardH, bedH);
+    sim.reset(0.3);
+    moveGantry(sim, 0.1, 0);
+    dropClaw(sim);
+    const z = sim.headPos()[2];
+    sim.dispose();
+    return z;
+  }
+
+  test('the claw lands as much higher as the bed is raised', async () => {
+    const low = await landingZ(0);
+    const high = await landingZ(0.2);
+    expect(high - low).toBeCloseTo(0.2, 2);
+  });
+
+  test('prizes are laid out on the raised bed and the chute still counts a drop', async () => {
+    const h = CABINET.hole;
+    const y = (h.y0 + h.y1) / 2;
+    const sim = await ClawSimulation.create(tuning(), [{ kind: 'cookieBox', pos: [h.x1 + 0.07, y, 0.025], yaw: 0, color: '#fff' }], 0, 0.15);
+    let drops = 0;
+    sim.events.onPrizeDrop = () => drops++;
+    sim.reset(0.5);
+    // Resting on the raised bed (cookie box half height 0.025 above the bed top).
+    expect(prizeZ(sim, 0)).toBeGreaterThan(0.15);
+    expect(prizeZ(sim, 0)).toBeLessThan(0.15 + 0.04);
+    sim.data.qvel[sim.ids.prizeDof[0]] = -1.2;
+    sim.step(2);
+    expect(drops).toBe(1);
+    sim.dispose();
+  });
+
+  test('changing the bed height carries prizes along and clamps to the range', async () => {
+    const sim = await ClawSimulation.create(tuning(), [{ kind: 'cookieBox', pos: [0.1, 0.1, 0.03], yaw: 0.5, color: '#fff' }]);
+    sim.reset(1.0);
+    const before = [0, 1, 2].map((k) => sim.data.xpos[sim.ids.prizeBodies[0] * 3 + k]);
+    sim.setBedHeight(0.12);
+    let top = 0;
+    for (let g = 0; g < sim.model.ngeom; g++) if (sim.geomName(g) === 'floor_main') top = sim.model.geom_pos[g * 3 + 2] + sim.model.geom_size[g * 3 + 2];
+    expect(top).toBeCloseTo(0.12, 4);
+    const b = sim.ids.prizeBodies[0] * 3;
+    expect(sim.data.xpos[b]).toBeCloseTo(before[0], 2);
+    expect(sim.data.xpos[b + 1]).toBeCloseTo(before[1], 2);
+    expect(sim.data.xpos[b + 2] - before[2]).toBeCloseTo(0.12, 2);
+    sim.setBedHeight(5);
+    expect(sim.bedH).toBe(CABINET.bedRange[1]);
+    sim.dispose();
+  });
+});

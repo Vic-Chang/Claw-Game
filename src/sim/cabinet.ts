@@ -17,6 +17,12 @@ export const CABINET = {
   /** Adjustable guard height range (m). 0 = no guard. */
   guardRange: [0, 0.15] as [number, number],
   guardT: 0.006,
+  /**
+   * Adjustable prize-bed (檯面) height above its lowest position (m). Raising the bed lifts
+   * everything on it — prizes, chute opening, guard — while the gantry and roof stay put,
+   * so the claw drops a shorter distance.
+   */
+  bedRange: [0, 0.3] as [number, number],
   /** Gantry travel limits (limit switches), carriage position. */
   travel: { x0: -0.29, x1: 0.29, y0: -0.26, y1: 0.26 },
   /** Home position (above the hole). */

@@ -61,6 +61,8 @@ export class ClawSimulation {
   prizes: PrizePlacement[];
   /** Chute guard (出貨口擋板) height in metres. */
   guardH: number = CABINET.guardH;
+  /** Prize-bed (檯面) height above its lowest position, metres. */
+  bedH = 0;
   prizeState: PrizeState[] = [];
   readonly solenoid = new Solenoid();
   readonly timestep = 0.002;
@@ -76,16 +78,26 @@ export class ClawSimulation {
   private prevHeadVel: [number, number, number] = [0, 0, 0];
   time = 0;
 
-  private constructor(mj: Mujoco, claw: ClawTuning, prizes: PrizePlacement[], guardH: number) {
+  private constructor(mj: Mujoco, claw: ClawTuning, prizes: PrizePlacement[], guardH: number, bedH: number) {
     this.mj = mj;
     this.guardH = guardH;
+    this.bedH = clampBed(bedH);
     this.claw = cloneClawTuning(claw);
-    this.prizes = prizes.map((p) => ({ ...p }));
+    this.prizes = this.onBed(prizes);
     this.compile();
   }
 
-  static async create(claw: ClawTuning, prizes: PrizePlacement[], guardH: number = CABINET.guardH): Promise<ClawSimulation> {
-    return new ClawSimulation(await getMujoco(), claw, prizes, guardH);
+  /**
+   * `prizes` are placed relative to the bed surface (z = 0 is the bed top, as `layoutPrizes`
+   * produces them); `bedH` raises the whole bed.
+   */
+  static async create(claw: ClawTuning, prizes: PrizePlacement[], guardH: number = CABINET.guardH, bedH = 0): Promise<ClawSimulation> {
+    return new ClawSimulation(await getMujoco(), claw, prizes, guardH, bedH);
+  }
+
+  /** Bed-relative placements → world placements. */
+  private onBed(prizes: PrizePlacement[]): PrizePlacement[] {
+    return prizes.map((p) => ({ ...p, pos: [p.pos[0], p.pos[1], p.pos[2] + this.bedH] }));
   }
 
   private name2id(type: number, name: string): number {
@@ -112,7 +124,7 @@ export class ClawSimulation {
   }
 
   private compile(): void {
-    const xml = buildMjcf({ claw: this.claw, prizes: this.prizes, guardH: this.guardH, timestep: this.timestep });
+    const xml = buildMjcf({ claw: this.claw, prizes: this.prizes, guardH: this.guardH, bedH: this.bedH, timestep: this.timestep });
     const mj = this.mj;
     this.model = mj.MjModel.from_xml_string(xml);
     this.data = new mj.MjData(this.model);
@@ -300,9 +312,18 @@ export class ClawSimulation {
     this.rebuild();
   }
 
+  /** Raises or lowers the prize bed (metres above its lowest position); prizes ride along. */
+  setBedHeight(h: number): void {
+    const clamped = clampBed(h);
+    const dz = clamped - this.bedH;
+    if (Math.abs(dz) < 1e-6) return;
+    this.bedH = clamped;
+    this.rebuild(dz);
+  }
+
   /** Replaces the prize layout (machine set-up page) and restarts physics. */
   setPrizes(prizes: PrizePlacement[]): void {
-    this.prizes = prizes.map((p) => ({ ...p }));
+    this.prizes = this.onBed(prizes);
     this.prizeState = [];
     this.wonAt.clear();
     this.data.delete();
@@ -311,12 +332,14 @@ export class ClawSimulation {
     this.reset();
   }
 
-  private rebuild(): void {
+  /** Recompiles the model; `bedShift` moves prizes still in the cabinet up/down with the bed. */
+  private rebuild(bedShift = 0): void {
     // Snapshot prize poses so the rebuilt model starts exactly where we were.
     const q = this.data.qpos;
     this.prizes = this.prizes.map((p, i) => {
       const a = this.ids.prizeQ[i];
-      return { ...p, pos: [q[a], q[a + 1], q[a + 2]], quat: [q[a + 3], q[a + 4], q[a + 5], q[a + 6]] };
+      const dz = this.prizeState[i]?.won ? 0 : bedShift;
+      return { ...p, pos: [q[a], q[a + 1], q[a + 2] + dz], quat: [q[a + 3], q[a + 4], q[a + 5], q[a + 6]] };
     });
     const [gx, gy] = this.gantryPos();
     this.data.delete();
@@ -387,7 +410,7 @@ export class ClawSimulation {
     for (let i = 0; i < this.prizes.length; i++) {
       const st = this.prizeState[i];
       const b = this.ids.prizeBodies[i] * 3;
-      if (!st.won && x[b + 2] < -0.06 && x[b + 2] > -0.4 && overHole(x[b], x[b + 1])) {
+      if (!st.won && x[b + 2] < this.bedH - 0.06 && x[b + 2] > -0.4 && overHole(x[b], x[b + 1])) {
         st.won = true;
         this.wonAt.set(i, this.time);
         this.events.onPrizeDrop?.(i);
@@ -448,7 +471,7 @@ export class ClawSimulation {
       if (this.prizeState[i].won) continue;
       const b = this.ids.prizeBodies[i] * 3;
       const h = PRIZE_KINDS[this.prizes[i].kind].half;
-      if (x[b + 2] > Math.max(...h) + 0.08) return i;
+      if (x[b + 2] > this.bedH + Math.max(...h) + 0.08) return i;
     }
     return null;
   }
@@ -457,4 +480,9 @@ export class ClawSimulation {
     this.data.delete();
     this.model.delete();
   }
+}
+
+function clampBed(h: number): number {
+  const [lo, hi] = CABINET.bedRange;
+  return Math.max(lo, Math.min(hi, h));
 }

@@ -25,6 +25,7 @@
 | 天車、鋼索、到頂高度 | `sim/cabinet.ts` 的 `CABINET`（`pulleyZ`、`ropeTop`、`ropeMin`） |
 | 中控設定項（A–G） | `machine/settings.ts` 的 `MENU`；行為在 `machine/controller.ts` 的 `Board.update` |
 | 獎品種類與擺放 | `sim/prizes.ts`；形狀在 `sim/mjcf.ts` 的 `prizeXml` |
+| 檯面高度 | `sim/cabinet.ts` 的 `bedRange`；`sim/mjcf.ts` 的 `cabinetXml`；`ClawSimulation.setBedHeight` |
 | 出貨口、擋板、電眼 | `sim/mjcf.ts` 的 `cabinetXml`；`ClawSimulation.checkElectricEye` |
 | 台主面板介面 | `ui/operatorPanel.ts`（每個分頁對應一個 `build*` 方法） |
 | 新增 Worker 訊息 | `worker/protocol.ts` → `physicsWorker.ts` 的 `handle` → `main.ts` |

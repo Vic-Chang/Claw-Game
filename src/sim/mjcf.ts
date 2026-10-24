@@ -276,7 +276,7 @@ function prizeXml(p: PrizePlacement, i: number): string {
   }
 }
 
-function cabinetXml(guardH: number): string {
+function cabinetXml(guardH: number, bedH: number): string {
   const { halfW: W, halfD: D, wallH, hole, guardT } = CABINET;
   const T = 0.02;
   const box = (name: string, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, extra = '') =>
@@ -286,9 +286,10 @@ function cabinetXml(guardH: number): string {
   const acrylic = `rgba="0.85 0.95 1 0.3" friction="0.25 0.002 0.0001"`;
   const chute = `rgba="0.25 0.25 0.3 1" friction="0.3 0.003 0.0001"`;
   return [
-    // Prize bed (plush fabric) with the chute cut out of the front-left corner.
-    box('floor_main', hole.x1, W, -D, D, -T, 0, floor),
-    box('floor_back', -W, hole.x1, hole.y1, D, -T, 0, floor),
+    // Prize bed (plush fabric) with the chute cut out of the front-left corner; a raised bed
+    // is a solid block from the lowest position up to its top.
+    box('floor_main', hole.x1, W, -D, D, -T, bedH, floor),
+    box('floor_back', -W, hole.x1, hole.y1, D, -T, bedH, floor),
     // Glass walls.
     box('glass_left', -W - 0.01, -W, -D, D, -0.3, wallH, glass),
     box('glass_right', W, W + 0.01, -D, D, -0.3, wallH, glass),
@@ -297,14 +298,14 @@ function cabinetXml(guardH: number): string {
     // Acrylic guard around the chute (防護擋板); the operator sets its height, 0 removes it.
     ...(guardH > 0.001
       ? [
-          box('guard_side', hole.x1, hole.x1 + guardT, hole.y0, hole.y1 + guardT, 0, guardH, acrylic),
-          box('guard_back', hole.x0, hole.x1 + guardT, hole.y1, hole.y1 + guardT, 0, guardH, acrylic),
+          box('guard_side', hole.x1, hole.x1 + guardT, hole.y0, hole.y1 + guardT, bedH, bedH + guardH, acrylic),
+          box('guard_back', hole.x0, hole.x1 + guardT, hole.y1, hole.y1 + guardT, bedH, bedH + guardH, acrylic),
         ]
       : []),
     // Chute shaft and the sloped slide to the pickup door.
-    box('chute_front', hole.x0, hole.x1, hole.y0 - 0.01, hole.y0, -0.3, 0, chute),
-    box('chute_inner', hole.x1, hole.x1 + 0.01, hole.y0, hole.y1, -0.3, -T, chute),
-    box('chute_back', hole.x0, hole.x1, hole.y1, hole.y1 + 0.01, -0.3, -T, chute),
+    box('chute_front', hole.x0, hole.x1, hole.y0 - 0.01, hole.y0, -0.3, bedH, chute),
+    box('chute_inner', hole.x1, hole.x1 + 0.01, hole.y0, hole.y1, -0.3, bedH - T, chute),
+    box('chute_back', hole.x0, hole.x1, hole.y1, hole.y1 + 0.01, -0.3, bedH - T, chute),
     `<geom name="chute_slide" type="box" pos="${v((hole.x0 + hole.x1) / 2, (hole.y0 + hole.y1) / 2, -0.28)}" size="${v((hole.x1 - hole.x0) / 2, (hole.y1 - hole.y0) / 2, 0.01)}" euler="-0.35 0 0" ${chute}/>`,
     // Out-of-play storage shelf for prizes that were won.
     `<geom name="storage" type="plane" pos="0 0 -3" size="5 5 0.1" rgba="0 0 0 0"/>`,
@@ -316,6 +317,8 @@ export interface MjcfOptions {
   prizes: PrizePlacement[];
   /** Chute guard height in metres (default CABINET.guardH). */
   guardH?: number;
+  /** Prize-bed height above its lowest position in metres (default 0). */
+  bedH?: number;
   timestep?: number;
 }
 
@@ -330,7 +333,7 @@ export function buildMjcf(opts: MjcfOptions): string {
   <geom contype="1" conaffinity="1" condim="4" solref="0.004 1" solimp="0.9 0.97 0.001"/>
 </default>
 <worldbody>
-${cabinetXml(opts.guardH ?? CABINET.guardH)}
+${cabinetXml(opts.guardH ?? CABINET.guardH, opts.bedH ?? 0)}
 <body name="gantry" pos="${v(0, 0, gantryZ)}">
   <joint name="gantry_x" type="slide" axis="1 0 0" range="${v(travel.x0, travel.x1)}" damping="4" armature="0.05"/>
   <joint name="gantry_y" type="slide" axis="0 1 0" range="${v(travel.y0, travel.y1)}" damping="4" armature="0.05"/>

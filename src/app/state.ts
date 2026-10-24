@@ -12,6 +12,8 @@ export interface AppConfig {
   volume: number;
   /** Chute guard (出貨口擋板) height, cm. */
   guardCm: number;
+  /** Prize-bed (檯面) height above its lowest position, cm. 0 = lowest. */
+  bedCm: number;
 }
 
 const KEY = 'feiluoli-machine-v1';
@@ -47,13 +49,14 @@ export function loadConfig(): AppConfig {
     seed: typeof saved.seed === 'number' ? saved.seed : 7,
     volume: typeof saved.volume === 'number' ? saved.volume : 0.6,
     guardCm: typeof saved.guardCm === 'number' ? saved.guardCm : CABINET.guardH * 100,
+    bedCm: typeof saved.bedCm === 'number' ? Math.max(CABINET.bedRange[0] * 100, Math.min(CABINET.bedRange[1] * 100, saved.bedCm)) : 0,
   };
 }
 
 export function saveConfig(c: AppConfig): void {
   saveSettings(c.settings);
   try {
-    globalThis.localStorage?.setItem(KEY, JSON.stringify({ claw: c.claw, counts: c.counts, seed: c.seed, volume: c.volume, guardCm: c.guardCm }));
+    globalThis.localStorage?.setItem(KEY, JSON.stringify({ claw: c.claw, counts: c.counts, seed: c.seed, volume: c.volume, guardCm: c.guardCm, bedCm: c.bedCm }));
   } catch {
     // Not persisted — fine.
   }

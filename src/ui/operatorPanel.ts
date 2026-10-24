@@ -26,6 +26,7 @@ export interface OperatorCallbacks {
   onClaw(c: ClawTuning): void;
   onPrizes(counts: PrizeCounts, seed: number): void;
   onGuard(heightCm: number): void;
+  onBed(heightCm: number): void;
   onTestPlay(): void;
   onClearAccounts(): void;
   onClearBank(): void;
@@ -471,6 +472,20 @@ export class OperatorPanel {
 
   private buildLayout(): void {
     const p = this.panel('layout');
+    p.append(el('h3', {}, '檯面高度'));
+    p.append(el('p', { class: 'note' }, '整個檯面（獎品、出貨口、擋板）一起升降，天車高度不變。0 cm＝最低；越高爪子下降的距離越短。調整後立即重建，獎品跟著檯面移動。'));
+    const [bLo, bHi] = CABINET.bedRange;
+    const bed = el('input', { type: 'range', min: String(bLo * 100), max: String(bHi * 100), step: '1' });
+    bed.value = String(this.cfg.bedCm);
+    const bedOut = el('output', {}, `${this.cfg.bedCm.toFixed(0)} cm`);
+    bed.addEventListener('input', () => (bedOut.textContent = `${Number(bed.value).toFixed(0)} cm`));
+    bed.addEventListener('change', () => {
+      this.cfg.bedCm = Number(bed.value);
+      this.cb.onBed(this.cfg.bedCm);
+    });
+    const bf = el('div', { class: 'field' });
+    bf.append(el('span', {}, '檯面高度'), bed, bedOut);
+    p.append(bf);
     p.append(el('h3', {}, '出貨口擋板'));
     p.append(el('p', { class: 'note' }, '出獎口內側的透明壓克力擋板高度。越高越難把獎品推（喇）進洞、夾起來也要舉得更高；0 cm＝拆掉擋板。調整後立即重建，獎品位置不變。'));
     const [gLo, gHi] = CABINET.guardRange;
