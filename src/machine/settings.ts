@@ -52,7 +52,7 @@ export const MENU: MenuGroup[] = [
       { code: 'A10b', label: 'A10夾亂數', help: '二收是否加入隨機延遲', kind: 'choice', choices: ['固定', '亂數'], default: 0 },
       { code: 'A11', label: 'A11下停上拉延遲', help: '抓到商品（合爪）之後還要停多久才上來', kind: 'number', min: 0, max: 3, step: 0.1, unit: '秒', default: 0, guessedRange: true },
       { code: 'A12a', label: 'A12上停上拉', help: '頂到管子後爪子還要往上拉多久（單位 0.1 秒），越多越好甩', kind: 'number', min: 0, max: 20, step: 1, unit: '×0.1秒', default: 5, guessedRange: true },
-      { code: 'A12b', label: 'A12回停下降', help: '回到原點後爪子往下降多久再開爪（單位 0.1 秒）', kind: 'number', min: 0, max: 20, step: 1, unit: '×0.1秒', default: 0, guessedRange: true },
+      { code: 'A12b', label: 'A12回停下降', help: '回到原點後爪子以固定 0.1 m/s 往下降多久再開爪，之後停在該高度不收回，讓爪子與防水片保持間隙（單位 0.1 秒）', kind: 'number', min: 0, max: 20, step: 1, unit: '×0.1秒', default: 0, guessedRange: true },
       { code: 'A13', label: 'A13促銷功能', help: '影片作者也不清楚用途；本模擬實作為「每 N 局送一局」（0＝關）', kind: 'number', min: 0, max: 20, step: 1, unit: '局送一局', default: 0, guessedRange: true },
       { code: 'A14', label: 'A14下爪長度時間', help: '線長：下爪最多放線幾秒；太短爪子會停在半空', kind: 'number', min: 0.5, max: 4, step: 0.1, unit: '秒', default: 2.0, guessedRange: true },
     ],

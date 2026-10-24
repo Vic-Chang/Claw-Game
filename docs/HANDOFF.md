@@ -3,15 +3,18 @@
 更新：2026-10-24
 
 ## 目前狀態
-- **分支**：`ccr-ca7e14bc-sjrc21`（從先前 `claude/claw-machine-game-physics-lftkbq` 的進度接續）。尚未開 PR（使用者要求時再開）。
+- **分支**：`ccr-ca7e14bc-sjrc21`，已合併 `main`（含 PR #2 的 A12b 回停下降修正），另外多了檯面高度功能。尚未開 PR（使用者要求時再開）。
 - **測試網址**（Artifact，私人）：https://claude.ai/artifact/2gJB3MEdhskE36CRUWA2nD
-  - 最新內容到 Version 8：包含檯面高度功能。程式改動後要重新建置並發布，步驟見 ARCHITECTURE「Artifact 發布」。
+  - 最新內容見下方「Artifact 版本」。程式改動後要重新建置並發布，步驟見 ARCHITECTURE「Artifact 發布」。
   - 頁面 `<title>` 維持「飛絡力夾娃娃機」；`mujoco-*.wasm` 檔名沒變時不必重傳（沒列在 `files` 的檔案會保留）。
-- **測試**：40 項全部通過。
+  - 注意：兩個分支都發布到同一個網址，後發布的會覆蓋前者；發布前確認分支已含另一邊的改動。
+- **Artifact 版本**：Version 9＝檯面高度＋A12b 回停下降修正。
+- **測試**：41 項全部通過。
 
 ## 最近完成
 - 檯面高度可調（台主模式 → 機台佈置，0～30 cm，0＝最低）：整個檯面、獎品、出貨口、擋板一起升降，天車不動。存在 `AppConfig.bedCm`，Worker 訊息 `bed`。
-- 先前：防甩片在天車下、真實 JS 爪外型、16 cm 爪距、出貨口擋板高度可調。
+- A12b 回停下降（來自 main）：天車歸位後下降的那段不再收回，爪子停在該高度與防甩片保持間隙，下一局從這裡開始（`controller.ts` 的 `restLen`）。下降速度固定 0.1 m/s（`HOME_LOWER_SPEED`，不受 E5 影響）：A12b=1 → 1 cm、5 → 5 cm、10 → 10 cm。
+- 先前：防甩片在天車下、真實 JS 爪外型、16 cm 爪距、出貨口擋板高度可調（0～15 cm）。
 
 ## 下一步
 - 等使用者試玩後回饋。
