@@ -56,6 +56,8 @@ export interface Accounts {
 /** Full-speed (100 %) mechanical speeds of the standard cabinet. */
 export const GANTRY_SPEED = 0.2; // m/s
 export const WINCH_SPEED = 0.32; // m/s
+/** E5 = 100 % drop speed; the winch pays out faster than it reels in. */
+export const WINCH_DOWN_SPEED = 0.48; // m/s
 /** A12 回停下降 lowers at this fixed speed, whatever E5 is set to. */
 export const HOME_LOWER_SPEED = 0.1; // m/s
 /** One step of 中壓距離頂點 in metres of cable from the top. */
@@ -322,7 +324,7 @@ export class Board {
       }
       case 'dropping': {
         io.setGantryVelocity(0, 0);
-        io.setWinchVelocity(WINCH_SPEED * (this.s('E5') / 100) * this.dropSpeedFactor);
+        io.setWinchVelocity(WINCH_DOWN_SPEED * (this.s('E5') / 100) * this.dropSpeedFactor);
         // 二收: second press of the grab button closes the claw in mid-air.
         if (this.grabPressed && this.s('A6a') === 1 && this.secondCatch === null) {
           const d = this.s('A6b');

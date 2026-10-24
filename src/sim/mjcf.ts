@@ -303,9 +303,11 @@ function cabinetXml(guardH: number, bedH: number): string {
         ]
       : []),
     // Chute shaft and the sloped slide to the pickup door.
-    box('chute_front', hole.x0, hole.x1, hole.y0 - 0.01, hole.y0, -0.3, bedH, chute),
-    box('chute_inner', hole.x1, hole.x1 + 0.01, hole.y0, hole.y1, -0.3, bedH - T, chute),
-    box('chute_back', hole.x0, hole.x1, hole.y1, hole.y1 + 0.01, -0.3, bedH - T, chute),
+    // Above the lowest bed the raised floor block and the front glass already wall the shaft in,
+    // so these stay below the bed (a raised dark wall would show through the front glass).
+    box('chute_front', hole.x0, hole.x1, hole.y0 - 0.01, hole.y0, -0.3, 0, chute),
+    box('chute_inner', hole.x1, hole.x1 + 0.01, hole.y0, hole.y1, -0.3, -T, chute),
+    box('chute_back', hole.x0, hole.x1, hole.y1, hole.y1 + 0.01, -0.3, -T, chute),
     `<geom name="chute_slide" type="box" pos="${v((hole.x0 + hole.x1) / 2, (hole.y0 + hole.y1) / 2, -0.28)}" size="${v((hole.x1 - hole.x0) / 2, (hole.y1 - hole.y0) / 2, 0.01)}" euler="-0.35 0 0" ${chute}/>`,
     // Out-of-play storage shelf for prizes that were won.
     `<geom name="storage" type="plane" pos="0 0 -3" size="5 5 0.1" rgba="0 0 0 0"/>`,

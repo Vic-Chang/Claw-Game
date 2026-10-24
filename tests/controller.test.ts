@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { B4_STEP, Board, HOME_LOWER_SPEED, type MachineIO } from '../src/machine/controller';
+import { B4_STEP, Board, HOME_LOWER_SPEED, type MachineIO, WINCH_DOWN_SPEED } from '../src/machine/controller';
 import { defaultSettings, type Settings } from '../src/machine/settings';
 import { CABINET } from '../src/sim/cabinet';
 
@@ -119,7 +119,7 @@ describe('Feiluoli board flow', () => {
     board.insertCoin();
     board.pressGrab();
     run(board, m, 3, () => board.state === 'closing');
-    expect(m.cableLimit).toBeLessThan(CABINET.ropeTop + 0.5 * 0.33);
+    expect(m.cableLimit).toBeLessThan(CABINET.ropeTop + 0.5 * WINCH_DOWN_SPEED * 1.03);
     expect(m.cableSlack).toBe(0);
   });
 
